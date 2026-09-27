@@ -1,0 +1,8 @@
+# Configuration for kentaro-m/auto-assign-action
+# https://github.com/kentaro-m/auto-assign-action
+
+addReviewers: false
+addAssignees: author
+
+skipKeywords:
+  - wip

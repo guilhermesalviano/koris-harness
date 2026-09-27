@@ -1,0 +1,9 @@
+[
+  {
+    "beat": "__koris_clear_images__",
+    "type": "scheduled_beat",
+    "cron_expression": "0 0 * * *",
+    "channel": null,
+    "target": null
+  }
+]

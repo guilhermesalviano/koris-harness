@@ -1,0 +1,116 @@
+name: "CodeQL Analysis"
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'core/**'
+      - 'plugins/**'
+      - 'apps/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  schedule:
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze Code with CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'javascript-typescript' ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.18.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
+          upload: true
+
+      - name: Upload CodeQL results as artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: codeql-results-${{ matrix.language }}
+          path: |
+            ${{ github.workspace }}/**/*.sarif
+          retention-days: 30
+          if-no-files-found: ignore
+
+  summary:
+    name: CodeQL Summary
+    runs-on: ubuntu-latest
+    needs: analyze
+    if: always()
+    
+    steps:
+      - name: Create summary
+        run: |
+          echo "## 🔍 CodeQL Analysis Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Analysis Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Language:** JavaScript/TypeScript" >> $GITHUB_STEP_SUMMARY
+          echo "- **Query Suite:** Security Extended" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${{ needs.analyze.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### What Was Scanned" >> $GITHUB_STEP_SUMMARY
+          echo "- Command injection vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          echo "- Path traversal issues" >> $GITHUB_STEP_SUMMARY
+          echo "- Cross-site scripting (XSS)" >> $GITHUB_STEP_SUMMARY
+          echo "- Prototype pollution" >> $GITHUB_STEP_SUMMARY
+          echo "- Regular expression DoS (ReDoS)" >> $GITHUB_STEP_SUMMARY
+          echo "- Insecure randomness" >> $GITHUB_STEP_SUMMARY
+          echo "- Cleartext storage of sensitive data" >> $GITHUB_STEP_SUMMARY
+          echo "- And 200+ other security patterns" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Check the **Security** tab for any alerts" >> $GITHUB_STEP_SUMMARY
+          echo "2. Review and triage any findings" >> $GITHUB_STEP_SUMMARY
+          echo "3. Dismiss false positives as needed" >> $GITHUB_STEP_SUMMARY
+          echo "4. Fix any confirmed vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.analyze.result }}" == "success" ]; then
+            echo "✅ **Analysis completed successfully!**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Analysis completed with warnings. Check logs above.**" >> $GITHUB_STEP_SUMMARY
+          fi

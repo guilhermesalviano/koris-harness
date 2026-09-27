@@ -1,0 +1,20 @@
+name: koris-searxng
+
+services:
+  searxng:
+    container_name: koris-searxng
+    image: docker.io/searxng/searxng:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mounted as a directory, not a single file: if `./config/settings.yml`
+      # doesn't exist yet, Docker would silently create an empty *directory*
+      # at that path for a missing file-mount, crashing the container's
+      # startup script. A missing directory-mount is safe (Docker creates a
+      # real directory, and the image falls back to its bundled defaults).
+      - ../config:/etc/searxng:Z
+      - searxng-data:/var/cache/searxng/
+
+volumes:
+  searxng-data:

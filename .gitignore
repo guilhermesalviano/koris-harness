@@ -1,0 +1,81 @@
+# Build output
+dist
+dist-web
+dist-desktop-out
+build-resources
+apps/desktop/out
+apps/tauri/sidecar/out
+apps/tauri/src-tauri/target
+apps/tauri/src-tauri/gen
+next-env.d.ts
+*.tsbuildinfo
+
+.agents
+
+# Dependencies
+node_modules
+
+# Local config & secrets (machine-specific, not shared)
+.env
+koris.json
+settings.json
+**/settings.yml
+plugins/*/*/config.yml
+
+# Test/build reports & coverage
+.testresults
+reports/
+.stryker-tmp/
+coverage/
+.vitest/
+
+# Logs
+logs/
+
+# Runtime data (writable at runtime; folder kept via .gitkeep)
+temp/*
+!temp/.gitkeep
+
+core/memory/*
+!core/memory/.gitkeep
+
+memory/*
+!memory/.gitkeep
+
+.whatsapp_auth
+
+# Channels, tools & skills: only track the current allowlist below. Anything new —
+# scaffolded locally or dropped in later (e.g. by a koris-hub sync) — stays
+# untracked by default.
+plugins/channels/*
+!plugins/channels/channel-config.ts
+!plugins/channels/contracts.test.ts
+!plugins/channels/contracts.ts
+!plugins/channels/index.ts
+!plugins/channels/index.test.ts
+!plugins/channels/.gitkeep
+
+plugins/tools/*
+!plugins/tools/contracts.ts
+!plugins/tools/cron.ts
+!plugins/tools/define-tool.ts
+!plugins/tools/define-tool.test.ts
+!plugins/tools/errands
+!plugins/tools/send-message
+!plugins/tools/delete-beat
+!plugins/tools/list-beats
+!plugins/tools/set-beat
+!plugins/tools/update-beat
+!plugins/tools/index.ts
+!plugins/tools/runtime.ts
+!plugins/tools/runtime.test.ts
+
+plugins/skills/*
+!plugins/skills/.gitkeep
+!plugins/skills/koris-help
+
+plugins/mcps/*
+!plugins/mcps/contracts.ts
+!plugins/mcps/index.ts
+!plugins/mcps/index.test.ts
+!plugins/mcps/.gitkeep

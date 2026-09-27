@@ -1,0 +1,1 @@
+// validate that the prompt is safe and does not contain any malicious content

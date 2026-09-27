@@ -1,0 +1,101 @@
+appId: com.guilhermesalviano.koris
+productName: koris
+executableName: koris
+copyright: Copyright © guilhermesalviano
+
+# The app asar carries no node_modules, and the server tree in extraResources
+# (with better-sqlite3's N-API prebuilds) is copied verbatim, not rebuilt.
+npmRebuild: false
+
+# electron-builder is invoked with cwd = apps/desktop (via
+# apps/desktop/scripts/package-desktop.mjs) so it reads apps/desktop/package.json
+# instead of the repo-root "/koris" package. All paths below are relative to
+# apps/desktop/.
+directories:
+  output: ../../dist-desktop-out
+  buildResources: build
+
+# app version comes from the repo-root package.json, injected at build time by
+# apps/desktop/scripts/package-desktop.mjs (-c.extraMetadata.version=...).
+
+# Only the compiled Electron main-process bundle goes inside the asar. It
+# requires nothing but `electron` + Node builtins, so no node_modules.
+files:
+  - out/**/*
+  - '!**/*.map'
+
+# The koris server tree rides alongside the asar in Resources/server. The
+# Electron main process require()s it and runs it in-process (see
+# apps/desktop/server-runtime.ts), resolving the path via process.resourcesPath.
+# stage-server.mjs must run before packaging.
+extraResources:
+  - from: ../../dist
+    to: server/dist
+    filter: ['**/*', '!**/*.map']
+  - from: ../../dist-web
+    to: server/dist-web
+  - from: ../../core/load
+    to: server/core/load
+  - from: ../../heartbeats.default.json
+    to: server/heartbeats.default.json
+  - from: ../../koris.example.json
+    to: server/koris.example.json
+  - from: ../../build-resources/server-node_modules
+    to: server/node_modules
+  - from: ../../build-resources/server-package.json
+    to: server/package.json
+
+publish:
+  provider: github
+  owner: guilhermesalviano
+  repo: koris
+
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+linux:
+  category: Utility
+  maintainer: guilhermesalviano <koaris.project@gmail.com>
+  icon: build/icon.png
+  target:
+    - AppImage
+    - deb
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.png
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  # Signing is not wired yet: `identity: null` forces electron-builder to skip
+  # code signing so unsigned builds still succeed. To activate signing, remove
+  # this line and set CSC_LINK / CSC_KEY_PASSWORD; to also notarize, set
+  # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID and `notarize: true`.
+  # See apps/desktop/features/packaging.md. The keys below are inert until then.
+  identity: null
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: false
+
+dmg:
+  # No auto-update yet, so skip the delta-update metadata (.dmg.blockmap).
+  writeUpdateInfo: false
+
+win:
+  icon: build/icon.png
+  # electron-builder auto-consumes CSC_LINK / CSC_KEY_PASSWORD from the
+  # environment when present; unsigned otherwise.
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  # No auto-update yet, so skip the delta-update metadata (.exe.blockmap).
+  differentialPackage: false

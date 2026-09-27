@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions for the local splash/error pages only. The dashboard is loaded from a remote http://127.0.0.1:<port> origin and is deliberately granted nothing: it uses no Tauri JS APIs, and every plugin here (opener, window-state, single-instance) is driven from Rust. Adding a `remote` key would hand the server-rendered page IPC access, so don't.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

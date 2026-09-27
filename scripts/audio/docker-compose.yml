@@ -1,0 +1,20 @@
+name: koris-audio
+
+services:
+  audio-sidecar:
+    container_name: koris-audio
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "6006:6006"
+    volumes:
+      - ./models:/app/models:Z
+    environment:
+      - PORT=6006
+      - HOST=0.0.0.0
+      - SHERPA_NUM_THREADS=2
+      - SHERPA_MODEL_DIR=/app/models
+      - PIPER_VOICE_DIR=/app/models/piper
+      - PIPER_DEFAULT_VOICE=en_US-lessac-medium

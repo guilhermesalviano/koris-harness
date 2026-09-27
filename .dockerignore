@@ -1,0 +1,32 @@
+# Dependencies and build outputs
+node_modules
+**/node_modules
+**/dist
+**/dist-web
+
+# Logs and runtime data
+logs
+**/logs
+*.log
+
+# Database files
+**/*.db
+**/*.db-shm
+**/*.db-wal
+
+# Secrets and local config
+.env
+**/.env
+**/koris.json
+
+# Dev / CI artifacts
+.git
+.github
+.turbo
+coverage
+**/.stryker-tmp
+**/stryker.config.json
+
+# Temp
+temp
+**/temp

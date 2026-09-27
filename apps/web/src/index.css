@@ -1,0 +1,306 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", sans-serif;
+  --font-mono: "DM Mono", monospace;
+
+  --color-bg: #0a0a0f;
+  --color-bg-2: #111118;
+  --color-bg-3: #18181f;
+  --color-bg-4: #1e1e28;
+
+  --color-accent: #F36246;
+  --color-accent-2: #ff8064;
+
+  --color-txt: #e8e8f0;
+  --color-txt-2: #8888a0;
+  --color-txt-3: #555568;
+
+  --color-border-subtle: rgba(255, 255, 255, 0.07);
+  --color-border-strong: rgba(255, 255, 255, 0.12);
+  --color-border-accent-muted: rgba(243, 98, 70, 0.3);
+  --color-accent-muted: rgba(243, 98, 70, 0.12);
+
+  /* Semantic status colors. Use these instead of raw palette classes
+     (green-500/red-400/emerald-500) so light mode stays legible. */
+  --color-success: #34d399;
+  --color-success-2: #6ee7b7;
+  --color-success-muted: rgba(52, 211, 153, 0.12);
+  --color-border-success: rgba(52, 211, 153, 0.3);
+
+  --color-danger: #f87171;
+  --color-danger-2: #fca5a5;
+  --color-danger-muted: rgba(248, 113, 113, 0.12);
+  --color-border-danger: rgba(248, 113, 113, 0.32);
+
+  --color-warn: #fbbf24;
+  --color-warn-2: #fcd34d;
+  --color-warn-muted: rgba(251, 191, 36, 0.12);
+  --color-border-warn: rgba(251, 191, 36, 0.3);
+
+  --color-info: #60a5fa;
+  --color-info-2: #93c5fd;
+  --color-info-muted: rgba(96, 165, 250, 0.12);
+  --color-border-info: rgba(96, 165, 250, 0.3);
+
+  /* Type scale. Replaces the ad-hoc text-[9px]..text-[13px] arbitrary values.
+     Tailwind's own text-xs/sm/... are left untouched. */
+  --text-micro: 0.625rem;
+  --text-micro--line-height: 0.875rem;
+  --text-micro--letter-spacing: 0.04em;
+  --text-mini: 0.6875rem;
+  --text-mini--line-height: 1rem;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.125rem;
+  --text-body: 0.8125rem;
+  --text-body--line-height: 1.35rem;
+  --text-lead: 0.9375rem;
+  --text-lead--line-height: 1.5rem;
+  --text-title: 1.125rem;
+  --text-title--line-height: 1.5rem;
+  --text-title--letter-spacing: -0.01em;
+  --text-display: 1.5rem;
+  --text-display--line-height: 1.875rem;
+  --text-display--letter-spacing: -0.02em;
+  --text-hero: 2rem;
+  --text-hero--line-height: 2.375rem;
+  --text-hero--letter-spacing: -0.02em;
+
+  --radius-control: 10px;
+  --radius-panel: 14px;
+  --radius-card: 18px;
+
+  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 4px 12px rgba(0, 0, 0, 0.32), 0 16px 48px -16px rgba(0, 0, 0, 0.6);
+
+  --animate-msg-in: msgIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-blink: blink 1.3s ease-in-out infinite;
+  --animate-blink2: blink 1.3s ease-in-out 0.2s infinite;
+  --animate-blink3: blink 1.3s ease-in-out 0.4s infinite;
+  --animate-toast-in: toastIn 0.2s ease;
+  --animate-toast-out: toastOut 0.3s ease 3s forwards;
+  --animate-modal-in: modalIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-backdrop-in: backdropIn 0.15s ease-out both;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.97) translateY(4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes blink {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40%           { opacity: 1;   transform: scale(1); }
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes toastOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+:root {
+  color-scheme: dark;
+}
+
+@utility border-subtle {
+  border-color: var(--color-border-subtle);
+}
+
+@utility border-strong {
+  border-color: var(--color-border-strong);
+}
+
+@utility border-accent-muted {
+  border-color: var(--color-border-accent-muted);
+}
+
+@utility border-success {
+  border-color: var(--color-border-success);
+}
+
+@utility border-danger {
+  border-color: var(--color-border-danger);
+}
+
+@utility border-warn {
+  border-color: var(--color-border-warn);
+}
+
+@utility border-info {
+  border-color: var(--color-border-info);
+}
+
+@utility bg-accent-muted {
+  background-color: var(--color-accent-muted);
+}
+
+html.light {
+  color-scheme: light;
+  --color-bg: #f6f6f8;
+  --color-bg-2: #ffffff;
+  --color-bg-3: #efeff2;
+  --color-bg-4: #e4e4ea;
+  --color-txt: #191922;
+  --color-txt-2: #56566b;
+  --color-txt-3: #8f8fa3;
+  --color-border-subtle: rgba(0, 0, 0, 0.07);
+  --color-border-strong: rgba(0, 0, 0, 0.12);
+
+  --color-success: #047857;
+  --color-success-2: #065f46;
+  --color-success-muted: rgba(4, 120, 87, 0.1);
+  --color-border-success: rgba(4, 120, 87, 0.28);
+
+  --color-danger: #b91c1c;
+  --color-danger-2: #991b1b;
+  --color-danger-muted: rgba(185, 28, 28, 0.08);
+  --color-border-danger: rgba(185, 28, 28, 0.28);
+
+  --color-warn: #b45309;
+  --color-warn-2: #92400e;
+  --color-warn-muted: rgba(180, 83, 9, 0.1);
+  --color-border-warn: rgba(180, 83, 9, 0.28);
+
+  --color-info: #1d4ed8;
+  --color-info-2: #1e40af;
+  --color-info-muted: rgba(29, 78, 216, 0.08);
+  --color-border-info: rgba(29, 78, 216, 0.26);
+
+  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 24px -12px rgba(0, 0, 0, 0.14);
+  --shadow-pop: 0 4px 12px rgba(0, 0, 0, 0.08), 0 16px 48px -16px rgba(0, 0, 0, 0.18);
+}
+
+html.light body::before {
+  background-image:
+    linear-gradient(rgba(243, 98, 70, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(243, 98, 70, 0.05) 1px, transparent 1px);
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+html.light .bubble pre {
+  background: #f0f0f2;
+}
+
+html.light .bubble pre::before {
+  color: #8f8fa3;
+}
+
+html.light .bubble :not(pre) > code {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+html.light .bubble hr {
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+/* Grid background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(243, 98, 70, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(243, 98, 70, 0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 2px; }
+
+.bubble pre {
+  position: relative;
+  overflow-x: auto;
+  border-radius: 10px;
+  background: #0d0d12;
+  padding: 1.5rem 0.85rem 0.85rem;
+  font-family: "DM Mono", monospace;
+  font-size: 12.5px;
+}
+
+.bubble pre::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-family: "DM Mono", monospace;
+  font-size: 10px;
+  color: #555568;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bubble code {
+  font-family: "DM Mono", monospace;
+}
+
+.bubble :not(pre) > code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+.bubble ul, .bubble ol {
+  margin: 0.4em 0;
+  padding-left: 1.3em;
+}
+
+.bubble h1, .bubble h2, .bubble h3 {
+  font-weight: 600;
+  margin: 0.5em 0 0.3em;
+}
+
+.bubble hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 0.6em 0;
+}
+
+.bubble p {
+  margin: 0.3em 0;
+}
+
+.configuration :is(button, a, input, textarea, select):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.configuration .rounded-card {
+  border-radius: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .configuration *, .configuration *::before, .configuration *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+html.light .configuration {
+  --color-accent-2: #b6402c;
+}
+
+html.light .configuration .text-red-400 {
+  color: #b91c1c;
+}

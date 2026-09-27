@@ -1,0 +1,222 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.18.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build server & web client
+        run: pnpm build
+
+      - name: Build desktop shell
+        run: pnpm build:desktop
+
+      - name: Run tests with coverage
+        run: pnpm run test:coverage --reporter=verbose
+
+      - name: Check if coverage was generated
+        id: check-coverage
+        run: |
+          if [ -f ./coverage/coverage-summary.json ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          elif [ -f ./coverage/coverage-final.json ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Evaluate coverage baseline & generate summary
+        if: steps.check-coverage.outputs.found == 'true'
+        env:
+          COVERAGE_MIN_LINES: '74'
+          COVERAGE_MIN_STATEMENTS: '74'
+          COVERAGE_MIN_FUNCTIONS: '77'
+          COVERAGE_MIN_BRANCHES: '67'
+          COVERAGE_TARGET: '80'
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const summaryPath = './coverage/coverage-summary.json';
+          const finalPath = './coverage/coverage-final.json';
+
+          const minLimits = {
+            lines: Number(process.env.COVERAGE_MIN_LINES ?? '74'),
+            statements: Number(process.env.COVERAGE_MIN_STATEMENTS ?? '74'),
+            functions: Number(process.env.COVERAGE_MIN_FUNCTIONS ?? '77'),
+            branches: Number(process.env.COVERAGE_MIN_BRANCHES ?? '67'),
+          };
+          const target = Number(process.env.COVERAGE_TARGET ?? '80');
+
+          let results = null;
+
+          if (fs.existsSync(summaryPath)) {
+            const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8')).total;
+            results = {
+              lines: summary.lines.pct,
+              statements: summary.statements.pct,
+              functions: summary.functions.pct,
+              branches: summary.branches.pct,
+            };
+          } else if (fs.existsSync(finalPath)) {
+            const coverage = JSON.parse(fs.readFileSync(finalPath, 'utf8'));
+            const totals = {
+              lines: { covered: 0, total: 0 },
+              statements: { covered: 0, total: 0 },
+              functions: { covered: 0, total: 0 },
+              branches: { covered: 0, total: 0 },
+            };
+
+            for (const fileData of Object.values(coverage)) {
+              const statements = fileData.s ?? {};
+              const statementKeys = Object.keys(statements);
+              totals.statements.total += statementKeys.length;
+              totals.statements.covered += statementKeys.filter((k) => Number(statements[k]) > 0).length;
+
+              const functions = fileData.f ?? {};
+              const functionKeys = Object.keys(functions);
+              totals.functions.total += functionKeys.length;
+              totals.functions.covered += functionKeys.filter((k) => Number(functions[k]) > 0).length;
+
+              const branches = fileData.b ?? {};
+              for (const branchCounts of Object.values(branches)) {
+                if (Array.isArray(branchCounts)) {
+                  totals.branches.total += branchCounts.length;
+                  totals.branches.covered += branchCounts.filter((count) => Number(count) > 0).length;
+                }
+              }
+
+              const lines = fileData.l ?? {};
+              const lineKeys = Object.keys(lines);
+              totals.lines.total += lineKeys.length;
+              totals.lines.covered += lineKeys.filter((k) => Number(lines[k]) > 0).length;
+            }
+
+            const percent = (metric) => (metric.total === 0 ? 100 : Number(((metric.covered / metric.total) * 100).toFixed(2)));
+            results = {
+              lines: percent(totals.lines),
+              statements: percent(totals.statements),
+              functions: percent(totals.functions),
+              branches: percent(totals.branches),
+            };
+          }
+
+          if (!results) {
+            console.error('No coverage summary found');
+            process.exit(1);
+          }
+
+          let hasRegression = false;
+          for (const [name, value] of Object.entries(results)) {
+            const baseline = minLimits[name] ?? 70;
+            if (value < baseline) {
+              hasRegression = true;
+              console.log(`::error title=Coverage Regression (${name})::${value}% is below baseline threshold (${baseline}%)`);
+            } else if (value < target) {
+              console.log(`::warning title=Coverage (${name})::${value}% meets baseline (${baseline}%) but below target (${target}%)`);
+            } else {
+              console.log(`::notice title=Coverage (${name})::${value}% meets target (${target}%)`);
+            }
+          }
+
+          const table = [
+            '## 📊 Coverage Summary',
+            '',
+            '| Metric | Coverage | Baseline Guard | Target | Status |',
+            '|---|---:|---:|---:|---|',
+          ];
+
+          for (const [name, value] of Object.entries(results)) {
+            const baseline = minLimits[name] ?? 70;
+            let status = '✅ Target Met';
+            if (value < baseline) {
+              status = '❌ Regressed below baseline';
+            } else if (value < target) {
+              status = '⚠️ Meets baseline, below target';
+            }
+            table.push(`| ${name} | ${value}% | ${baseline}% | ${target}% | ${status} |`);
+          }
+
+          table.push('');
+          if (process.env.GITHUB_STEP_SUMMARY) {
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${table.join('\n')}\n`);
+          }
+
+          if (hasRegression) {
+            console.error('Coverage regressed below baseline threshold!');
+            process.exit(1);
+          }
+          NODE
+
+      - name: Upload coverage artifact
+        if: steps.check-coverage.outputs.found == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: ./coverage
+          retention-days: 14
+
+      - name: Upload coverage reports to Codecov
+        if: steps.check-coverage.outputs.found == 'true'
+        uses: codecov/codecov-action@v5
+        continue-on-error: true
+        with:
+          files: ./coverage/coverage-final.json
+          flags: unittests
+          fail_ci_if_error: false
+
+  security:
+    name: Security Validations
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks secret scanner
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dependency Review
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+          allow-ghsas: GHSA-wrw7-89jp-8q8g

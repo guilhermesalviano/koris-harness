@@ -1,0 +1,72 @@
+{
+  "web_port": 3000,
+  "timezone": "America/Sao_Paulo",
+  "log_level": "debug",
+  "gateway_host": "http://localhost:3000",
+  "admin_secret": "",
+  "allowed_domains": [],
+  "skills": {
+    "mode": "auto",
+    "limit": 10
+  },
+  "heartbeat": false,
+  "session": {
+    "summarizer_mode": "manual",
+    "compact_threshold": 0.9
+  },
+  "errands": {
+    "hard_expiry_ms": 604800000,
+    "history_limit": 100,
+    "max_concurrent": 10
+  },
+  "ai": {
+    "parallel": false,
+    "background_grace_ms": 5000,
+    "subagents_parallel": false,
+    "providers": [
+      {
+        "provider": "ollama",
+        "base_url": "http://localhost:11434",
+        "api_token": "PROVIDER_API_TOKEN",
+        "num_ctx": 16384,
+        "model": "gemma4:e4b-it-q4_K_M"
+      }
+    ],
+    "roles": {
+      "manager": { "provider": "ollama" },
+      "workers": { "provider": "ollama" }
+    },
+    "embed": { "enabled": true, "provider": "ollama", "model": "nomic-embed-text" },
+    "searxng_url": "http://localhost:8080",
+    "prompt_sanitizer": false,
+    "timeouts": {
+      "idle_ms": 360000,
+      "hard_ms": 1200000,
+      "health_ms": 5000
+    }
+  },
+  "audio": {
+    "stt": {
+      "enabled": false,
+      "endpoint": "http://127.0.0.1:6006/v1/audio/transcriptions",
+      "language": "auto",
+      "timeout_ms": 30000
+    },
+    "tts": {
+      "enabled": false,
+      "endpoint": "http://127.0.0.1:6006/v1/audio/speech",
+      "voice": "en_US-lessac-medium",
+      "speed": 1.0,
+      "max_input_chars": 5000,
+      "timeout_ms": 30000
+    }
+  },
+  "github": {
+    "token": "ghp_xxx",
+    "owner": "your-github-username-or-org"
+  },
+  "personal_information": {
+    "name": "John Doe"
+  }
+}
+

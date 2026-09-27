@@ -1,0 +1,11 @@
+{
+  "name": "koris-desktop",
+  "productName": "koris",
+  "version": "0.1.0",
+  "private": true,
+  "description": "koris desktop app (Electron shell around the koris agent server + web dashboard)",
+  "author": "guilhermesalviano <koaris.project@gmail.com>",
+  "homepage": "https://github.com/guilhermesalviano/koris",
+  "license": "ISC",
+  "main": "out/main.js"
+}

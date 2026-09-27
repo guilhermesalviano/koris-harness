@@ -1,0 +1,18 @@
+name: Auto Assign
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+
+jobs:
+  add-assignee:
+    name: Assign PR to author
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Auto-assign PR author
+        uses: kentaro-m/auto-assign-action@v2.0.2
+        with:
+          configuration-path: '.github/auto_assign.yml'

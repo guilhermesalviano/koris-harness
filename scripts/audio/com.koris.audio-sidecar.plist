@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.koris.audio-sidecar</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Replace __KORIS_ROOT__ with absolute path to koris repository (e.g. /Users/guibs/projects/koris) -->
+        <string>__KORIS_ROOT__/scripts/audio/.venv/bin/python</string>
+        <string>__KORIS_ROOT__/scripts/audio/server.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__KORIS_ROOT__/scripts/audio</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- On Intel 2018 Mac mini, Homebrew installs ffmpeg to /usr/local/bin. On Apple Silicon, /opt/homebrew/bin -->
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOST</key>
+        <string>127.0.0.1</string>
+        <key>PORT</key>
+        <string>6006</string>
+        <!-- Cap threads to 2 for optimal CPU thermal management on Intel 2018 Mac mini -->
+        <key>SHERPA_NUM_THREADS</key>
+        <string>2</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <!-- Replace __HOME__ with user home directory (e.g. /Users/guibs) -->
+    <string>__HOME__/Library/Logs/koris-audio-sidecar.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__HOME__/Library/Logs/koris-audio-sidecar.err.log</string>
+</dict>
+</plist>

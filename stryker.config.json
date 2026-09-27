@@ -1,0 +1,40 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "reporters": ["html", "json", "clear-text", "progress"],
+  "coverageAnalysis": "perTest",
+  "mutate": [
+    "core/src/utils/fields.ts",
+    "core/src/utils/prompt.ts",
+    "core/src/utils/sanitize-log-text.ts",
+    "core/src/utils/telegram.ts",
+    "core/src/utils/tool-calls.ts",
+    "core/src/utils/provider.ts",
+    "core/src/entities/message.ts",
+    "core/src/entities/session.ts",
+    "core/src/entities/errand.ts",
+    "core/src/repositories/context.ts",
+    "core/src/repositories/heartbeat.ts",
+    "core/src/repositories/learned-skills.ts",
+    "core/src/repositories/memory.ts",
+    "core/src/repositories/session.ts",
+    "core/src/repositories/errand.ts",
+    "core/src/repositories/skills.ts",
+    "core/src/services/chat/chat-service.ts",
+    "core/src/services/agents/main-agent.ts",
+    "core/src/services/session-service.ts",
+    "core/src/services/session-manager.ts",
+    "core/src/services/errands/index.ts",
+    "core/src/utils/session.ts"
+  ],
+  "thresholds": {
+    "high": 80,
+    "low": 60,
+    "break": null
+  },
+  "htmlReporter": {
+    "fileName": "reports/mutation/mutation.html"
+  },
+  "tempDirName": ".stryker-tmp"
+}

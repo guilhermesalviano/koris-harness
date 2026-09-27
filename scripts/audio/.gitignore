@@ -1,0 +1,13 @@
+# Python virtual environment
+.venv/
+
+# Downloaded models
+models/
+
+# Bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary files
+*.tmp

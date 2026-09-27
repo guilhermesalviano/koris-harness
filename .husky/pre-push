@@ -1,0 +1,6 @@
+pnpm lint
+pnpm lint:client
+pnpm lint:desktop
+pnpm lint:tauri
+pnpm validate
+pnpm test:coverage

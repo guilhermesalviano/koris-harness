@@ -1,0 +1,24 @@
+# Copy this file into config/settings.yml (docker-compose.yml mounts ./config
+# as a directory) and set a real secret_key before starting the container:
+#
+#   mkdir -p config
+#   cp settings.example.yml config/settings.yml
+#   openssl rand -hex 32          # paste the output as server.secret_key below
+#
+# `use_default_settings: true` merges this file on top of SearXNG's bundled
+# defaults (all engines included) — only the keys below are overridden.
+# Full reference: https://docs.searxng.org/admin/settings/settings.html
+
+use_default_settings: true
+
+server:
+  secret_key: "REPLACE_WITH_OUTPUT_OF_openssl_rand_-hex_32"
+  bind_address: "0.0.0.0"
+  # This instance is only reached by the koris bot on your own network, not the public internet.
+  limiter: false
+
+search:
+  # json is required — koris's search_engine tool calls /search?format=json.
+  formats:
+    - html
+    - json
