@@ -20,11 +20,6 @@ import { IBackgroundDispatcher, BackgroundDispatcherFactory } from './background
 import { shouldAutoCompact } from './context-budget';
 import { IChannelService, ChannelServiceFactory } from '../channel-service';
 import type { InboundInput, IMessageGateway, StickerReference } from '../../../../plugins/channels/contracts';
-import { buildErrandService } from '../errands';
-import { formatOpenErrandsBlock } from '../errands/prompt';
-import { runErrandOperation } from '../errands/operations';
-import { CHANNEL_TYPES } from '../../entities/channel';
-import { Negotiator, NegotiatorFactory } from './sub-agents/negotiator/sub-agent';
 
 export type { InboundInput, IMessageGateway };
 
@@ -53,14 +48,11 @@ class MessageGateway implements IMessageGateway {
   constructor(
     private logger: ILogger,
     private channel: string,
-    private db: IDatabaseService,
-    private sessionManager: ISessionManager,
     private sessionContextFactory: ISessionContextFactory,
     private backgroundDispatcher: IBackgroundDispatcher,
     private mainAgent: IMainAgent,
     private channelService: IChannelService,
     private auditRepo: IAuditLogRepository,
-    private negotiator: Negotiator,
   ) {}
 
   async handle(input: InboundInput, originId: string, options?: ProcessOptions): Promise<ProcessedMessage> {
@@ -70,58 +62,12 @@ class MessageGateway implements IMessageGateway {
 
     this.logger.info(`Processing message from ${channel} (origin: ${originId}): "${previewMessage(safeMessage)}"${images?.length ? ` with ${images.length} image(s)` : ''}`);
 
-    // An approved errand owns the contact conversation regardless of whether
-    // that contact is also trusted. Trusted slash commands still belong to
-    // their user session; web/TUI requests without channel trust stay there too.
-    // The contact may reply under a different address than the errand was sent
-    // to (WhatsApp LID vs phone number), so the channel's aliases count too.
-    const routesErrands = options?.isTrustedSender !== undefined
-      && (!isCommand(safeMessage) || options.isTrustedSender === false);
-    const errandService = routesErrands ? buildErrandService(this.logger, this.db, this.sessionManager) : null;
-    const activeErrand = errandService?.findActiveForPeer(channel, originId, options?.peerAliases) ?? null;
-    // An untrusted contact writing after their errand was resolved reopens it
-    // and escalates to the principal; trusted senders keep their own session.
-    const reopenedErrand = !activeErrand && options?.isTrustedSender === false
-      ? errandService?.reopenForPeer(channel, originId, safeMessage, options.peerAliases) ?? null
-      : null;
-    const delegated = activeErrand ?? reopenedErrand;
-
-    const origin: SessionKey = delegated
-      ? { channel, peerId: originId, kind: 'delegated' }
-      : { channel, peerId: originId, kind: 'user' };
-    const { sessionService, messageService, memoryService } = this.sessionContextFactory.resolve(origin, delegated?.sessionId ?? options?.sessionId);
+    const origin: SessionKey = { channel, peerId: originId, kind: 'user' };
+    const { sessionService, messageService, memoryService } = this.sessionContextFactory.resolve(origin, options?.sessionId);
 
     this.channelService.record(channel, originId);
 
     const sessionCtx: SessionContext = { sessionService, messageService, memoryService };
-
-    if (reopenedErrand) {
-      // Nothing goes back to the contact until the principal answers the escalation.
-      return runErrandOperation(reopenedErrand.errand.id, async () => {
-        messageService.save({ role: 'user', content: safeMessage, images });
-        return '';
-      });
-    }
-
-    if (activeErrand) {
-      // Delegated turn: the negotiator drives it end to end — commands and
-      // tools are never dispatched for a contact's delegated message. Read and
-      // persist within the queue so the next turn sees the preceding exchange.
-      return runErrandOperation(activeErrand.errand.id, async () => {
-        const messageHistory = messageService.getHistory();
-        messageService.save({ role: 'user', content: safeMessage, images });
-        const result = await this.negotiator.run({
-          errandId: activeErrand.errand.id,
-          sessionId: sessionService.getSession().id,
-          channel,
-          peerMessage: safeMessage,
-          peerImages: images,
-          messageHistory,
-        });
-        if (result.reply) messageService.save({ role: 'assistant', content: result.reply });
-        return result.reply;
-      });
-    }
 
     let agentMessage = safeMessage;
     let skillBlocks: string[] | undefined;
@@ -167,8 +113,7 @@ class MessageGateway implements IMessageGateway {
     }
 
     const runId = options?.runId ?? generateId();
-    const errandBlock = options?.toolsEnabled ? this.openErrandsBlock(sessionService.getSession().id, channel) : null;
-    const promptBlocks = [...(skillBlocks ?? []), ...(errandBlock ? [errandBlock] : [])];
+    const promptBlocks = [...(skillBlocks ?? [])];
     const turnOptions = { ...options, runId, ...(promptBlocks.length ? { skillBlocks: promptBlocks } : {}) };
 
     // Manual-mode safety valve (proactive): if the session is near the manager's
@@ -269,22 +214,6 @@ class MessageGateway implements IMessageGateway {
         error: err instanceof Error ? err.message : String(err),
       });
       return response;
-    }
-  }
-
-  // Lets the Orchestrator map a plain "yes" to the right errand tool. Errands
-  // only run with a channel manager, so there is nothing to list without one.
-  // Questions only reach a WhatsApp/Telegram principal in this chat; on web they
-  // are answered from the Negotiator page, so the Orchestrator does not see them.
-  private openErrandsBlock(sessionId: string, channel: string): string | null {
-    try {
-      const errands = buildErrandService(this.logger, this.db, this.sessionManager)?.listByOrigin(sessionId) ?? [];
-      return formatOpenErrandsBlock(errands, { includeQuestions: (CHANNEL_TYPES as readonly string[]).includes(channel) });
-    } catch (err) {
-      this.logger.warn('Failed to list open errands for the prompt', {
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return null;
     }
   }
 
@@ -440,9 +369,8 @@ class MessageGatewayFactory {
     const mainAgent = MainAgentFactory.create(logger);
     const channelService = ChannelServiceFactory.create(db);
     const auditRepo = AuditLogRepositoryFactory.create(db);
-    const negotiator = NegotiatorFactory.create(logger, db, sessionManager);
 
-    return new MessageGateway(logger, channel, db, sessionManager, sessionContextFactory, backgroundDispatcher, mainAgent, channelService, auditRepo, negotiator);
+    return new MessageGateway(logger, channel, sessionContextFactory, backgroundDispatcher, mainAgent, channelService, auditRepo);
   }
 }
 

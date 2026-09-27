@@ -1,10 +1,6 @@
 import type { CommandResult } from '../../types/commands';
 
-export function formatMessage(message: string, channel: string): string {
-  // Telegram uses Markdown, TUI uses plain text
-  if (channel === 'telegram') {
-    return message;
-  }
+export function formatMessage(message: string, _channel: string): string {
   return message.replace(/\*/g, '');
 }
 

@@ -1,5 +1,4 @@
 import express, { type Request, type Response, type Router } from 'express';
-import { createHash } from 'node:crypto';
 import { config, reloadConfig } from '../config';
 import { isConfigFilePresent } from '../config/helpers';
 import {
@@ -45,7 +44,7 @@ import { buildUsageReport, usageFrom } from '../services/usage/usage';
 import { Heartbeat } from '../entities/heartbeat';
 import { AuditStatus, AuditType } from '../entities/audit-log';
 import { Session } from '../entities/session';
-import { NEGOTIATION_CHANNEL, SESSION_START_REASONS, type SessionKey, type SessionStartReason } from '../types/session';
+import { SESSION_START_REASONS, type SessionKey, type SessionStartReason } from '../types/session';
 import { carryForwardMetadata } from '../utils/session';
 import { BEAT_TYPES, BeatType } from '../types/beat';
 import { HeartbeatSingleton } from '../services/agents/sub-agents/heartbeat/runner';
@@ -59,10 +58,6 @@ import { ChannelsSingleton } from '../channels';
 import { OutboundMessageServiceFactory } from '../services/outbound/message-service';
 import { IMessageGateway } from '../services/agents/message-gateway';
 import { ISessionManager } from '../services/session-manager';
-import { ErrandRepositoryFactory } from '../repositories/errand';
-import { buildErrandService } from '../services/errands';
-import { ERRAND_STATES, ErrandState } from '../types/errand';
-import { Errand } from '../entities/errand';
 import { AGENTS } from '../constants/agents';
 import { PluginSettingsRepositoryFactory, type IPluginSettingsRepository } from '../repositories/plugin-settings';
 import { resolvePluginEnabled } from '../services/plugins/plugin-enablement';
@@ -106,28 +101,17 @@ function maskSecret(value: string): string {
 }
 
 /**
- * Reassembles the `CHANNELS.TELEGRAM`/`WHATSAPP` shape the frontend expects,
+ * Reassembles the `CHANNELS.WHATSAPP` shape the frontend expects,
  * sourcing every field (including the per-channel `ALLOW_UNLISTED_SENDERS`
  * policy) from each plugin's own config.yml.
  */
 function buildChannelsSnapshot(pluginSettingsRepo: IPluginSettingsRepository) {
-  const telegram = (loadChannelConfig('telegram') ?? {}) as {
-    token?: string;
-    whitelist?: string;
-    allowUnlistedSenders?: boolean;
-  };
   const whatsapp = (loadChannelConfig('whatsapp') ?? {}) as {
     authFolder?: string;
     whitelist?: string;
     allowUnlistedSenders?: boolean;
   };
   return {
-    TELEGRAM: {
-      ENABLED: resolvePluginEnabled(pluginSettingsRepo, 'channels', 'telegram'),
-      BOT_TOKEN: telegram.token ?? '',
-      WHITELIST: telegram.whitelist ?? '',
-      ALLOW_UNLISTED_SENDERS: telegram.allowUnlistedSenders ?? false,
-    },
     WHATSAPP: {
       ENABLED: resolvePluginEnabled(pluginSettingsRepo, 'channels', 'whatsapp'),
       AUTH_FOLDER: whatsapp.authFolder ?? '',
@@ -171,7 +155,6 @@ function toAiEmbedPatch(profile: Record<string, unknown>): AiEmbedPatch {
 
 function collectSettingsPayloadErrors(
   payload: Record<string, unknown>,
-  pluginSettingsRepo: IPluginSettingsRepository,
 ): string[] {
   const errors: string[] = [];
 
@@ -265,14 +248,6 @@ function collectSettingsPayloadErrors(
       if (embed.enabled !== false && typeof embed.model === 'string' && !embed.model.trim()) {
         errors.push(`${label}.model must not be empty when embeddings are enabled.`);
       }
-    }
-  }
-
-  const telegram = asRecord(asRecord(payload.channels)?.telegram);
-  if (telegram && 'bot_token' in telegram && resolvePluginEnabled(pluginSettingsRepo, 'channels', 'telegram')) {
-    const token = typeof telegram.bot_token === 'string' ? telegram.bot_token.trim() : '';
-    if (!token) {
-      errors.push('channels.telegram.bot_token cannot be blanked out while Telegram is enabled. Disable it first in Configuration → Plugins.');
     }
   }
 
@@ -439,7 +414,6 @@ class AdminRouterFactory {
 
       const channelsSnapshot = buildChannelsSnapshot(pluginSettingsRepo);
       const enabledChannels: { type: ChannelType; enabled: boolean }[] = [
-        { type: 'telegram', enabled: channelsSnapshot.TELEGRAM.ENABLED },
         { type: 'whatsapp', enabled: channelsSnapshot.WHATSAPP.ENABLED },
       ];
 
@@ -451,8 +425,6 @@ class AdminRouterFactory {
       res.json({
         sessions: sessionRepo.count(),
         openSessions: sessionRepo.countOpen(),
-        openErrands: (['draft', 'queued', 'open', 'awaiting_peer', 'awaiting_principal', 'awaiting_confirmation'] as ErrandState[])
-          .reduce((sum, state) => sum + ErrandRepositoryFactory.create(db).countByState(state), 0),
         messages: messageRepo.count(),
         memories: memoryRepo.count(),
         heartbeats: beats.length,
@@ -528,52 +500,6 @@ class AdminRouterFactory {
       });
     });
 
-    // The negotiation center: every errand's negotiation session (Negotiator
-    // notices and the principal's answers) as one feed, paged from the newest
-    // backwards. Each message names the errand its session belongs to.
-    router.get('/agents/negotiator/notices', (req: Request, res: Response) => {
-      const before = decodeTimelineCursor(req.query.before);
-      if (before === null) {
-        res.status(400).json({ error: 'Invalid cursor' });
-        return;
-      }
-      const limit = Math.min(Math.max(Number(req.query.limit) || TIMELINE_DEFAULT_LIMIT, 1), 200);
-
-      const page = messageRepo.getTimeline({ key: { channel: NEGOTIATION_CHANNEL, kind: 'user' }, before, limit });
-      const errandIds = new Map([...new Set(page.messages.map((m) => m.sessionId))]
-        .map((id) => [id, sessionRepo.findById(id)?.peerId ?? null]));
-      // Questions and proposed results still waiting on the principal, read in the
-      // same request as the notices so the page never shows one it cannot answer yet.
-      const errandService = buildErrandService(logger, db, sessionManager);
-      // Fingerprint of what the errand list shows (the same latest 50 errands):
-      // state, progress, delivery and each contact session's message count. It
-      // changes on every status change, with or without a notice, so the page can
-      // refresh the errand list only when it needs to.
-      const errands = errandService?.listAll(undefined, 50) ?? [];
-      const errandsVersion = createHash('sha1').update(JSON.stringify(errands.map((errand) => [
-        errand.id, errand.state, errand.lastProgressAt ?? null, errand.closedAt ?? null,
-        errand.pendingDelivery ? [errand.pendingDelivery.id, errand.pendingDelivery.targets.filter((target) => target.sentAt).length] : null,
-        getTargetDetails(errand.id).map((target) => target.messageCount),
-      ]))).digest('hex').slice(0, 16);
-      const pending = (['awaiting_principal', 'awaiting_confirmation'] as const)
-        .flatMap((state) => errandService?.listAll(state, 50) ?? [])
-        .filter((errand) => !errand.pendingDelivery)
-        .map((errand) => ({
-          errandId: errand.id,
-          goal: errand.goal,
-          kind: errand.state === 'awaiting_confirmation' ? 'confirmation' : 'question',
-          question: errand.pendingMessage ?? null,
-          askedAt: errand.lastProgressAt ?? errand.createdAt,
-        }));
-
-      res.json({
-        messages: page.messages.map((m) => ({ ...toMessageJson(m), errandId: errandIds.get(m.sessionId) ?? null })),
-        pending,
-        errandsVersion,
-        nextCursor: page.nextCursor ? encodeTimelineCursor(page.nextCursor) : null,
-      });
-    });
-
     // "New session" in the Orchestrator header: like `/clear`, ends the open web
     // session and starts a fresh one. An open session with no messages yet is
     // reused, so repeated clicks don't pile up empty sessions.
@@ -606,7 +532,7 @@ class AdminRouterFactory {
 
     router.get('/sessions', (req: Request, res: Response) => {
       const { limit, offset } = parsePagination(req);
-      const kind = req.query.kind === 'user' || req.query.kind === 'delegated' ? req.query.kind : undefined;
+      const kind = req.query.kind === 'user' ? 'user' : undefined;
       const sessions = sessionRepo.findAll(limit, offset, kind);
       res.json({
         total: sessionRepo.count(kind),
@@ -685,215 +611,6 @@ class AdminRouterFactory {
       sessionRepo.deleteById(id);
       sessionManager.invalidate(id);
       res.json({ success: true });
-    });
-
-    function toErrandJson(errand: Errand) {
-      return {
-        id: errand.id,
-        goal: errand.goal,
-        state: errand.state,
-        originSessionId: errand.originSessionId,
-        pendingMessage: errand.pendingMessage ?? null,
-        delivery: errand.pendingDelivery ? {
-          type: errand.pendingDelivery.type,
-          sent: errand.pendingDelivery.targets.filter((target) => target.sentAt).length,
-          total: errand.pendingDelivery.targets.length,
-          error: errand.pendingDelivery.error ?? null,
-        } : null,
-        notes: errand.notes ?? null,
-        result: errand.result ?? null,
-        createdAt: errand.createdAt,
-        lastProgressAt: errand.lastProgressAt ?? null,
-        closedAt: errand.closedAt ?? null,
-      };
-    }
-
-    function getTargetDetails(errandId: string) {
-      const targetSessionIds = ErrandRepositoryFactory.create(db).findTargets(errandId);
-      const sessionRepo = SessionRepositoryFactory.create(db);
-
-      return targetSessionIds.map((sessionId) => {
-        const session = sessionRepo.findById(sessionId);
-        return {
-          sessionId,
-          channel: session?.channel ?? 'unknown',
-          peerId: session?.peerId ?? 'unknown',
-          kind: session?.kind ?? 'delegated',
-          startedAt: session?.startedAt ?? null,
-          endedAt: session?.endedAt ?? null,
-          messageCount: session?.messageCount ?? 0,
-        };
-      });
-    }
-
-    router.get('/errands', (req: Request, res: Response) => {
-      const errandService = buildErrandService(logger, db, sessionManager);
-      if (!errandService) {
-        res.status(503).json({ error: 'Errands are not available: no channel manager is running.' });
-        return;
-      }
-
-      const { limit, offset } = parsePagination(req);
-      const rawState = typeof req.query.state === 'string' ? req.query.state : undefined;
-      const state = rawState && (ERRAND_STATES as readonly string[]).includes(rawState) ? (rawState as ErrandState) : undefined;
-
-      const errands = errandService.listAll(state, limit, offset);
-      res.json({
-        limit,
-        offset,
-        items: errands.map((errand) => ({
-          ...toErrandJson(errand),
-          targets: getTargetDetails(errand.id),
-        })),
-      });
-    });
-
-    router.get('/errands/:id', (req: Request, res: Response) => {
-      const errandService = buildErrandService(logger, db, sessionManager);
-      if (!errandService) {
-        res.status(503).json({ error: 'Errands are not available: no channel manager is running.' });
-        return;
-      }
-
-      const errand = errandService.get(String(req.params.id));
-      if (!errand) {
-        res.status(404).json({ error: 'Errand not found' });
-        return;
-      }
-
-      res.json({
-        ...toErrandJson(errand),
-        targets: getTargetDetails(errand.id),
-      });
-    });
-
-    router.get('/errands/:id/transcript', (req: Request, res: Response) => {
-      const errandService = buildErrandService(logger, db, sessionManager);
-      if (!errandService) {
-        res.status(503).json({ error: 'Errands are not available: no channel manager is running.' });
-        return;
-      }
-
-      const errand = errandService.get(String(req.params.id));
-      if (!errand) {
-        res.status(404).json({ error: 'Errand not found' });
-        return;
-      }
-
-      const targetSessionIds = ErrandRepositoryFactory.create(db).findTargets(errand.id);
-      const messageRepo = MessageRepositoryFactory.create(db);
-      const messages = targetSessionIds.flatMap((sessionId) => {
-        return messageRepo.getBySessionId(sessionId, 100).map((msg) => ({
-          id: msg.id,
-          sessionId,
-          role: msg.role,
-          content: msg.content,
-          ...(msg.images?.length ? { images: msg.images } : {}),
-          ...(msg.missingImages ? { missingImages: msg.missingImages } : {}),
-          createdAt: msg.createdAt,
-        }));
-      }).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-      res.json({
-        errandId: errand.id,
-        messages,
-      });
-    });
-
-    router.post('/errands/:id/approve', async (req: Request, res: Response) => {
-      const errandService = buildErrandService(logger, db, sessionManager);
-      if (!errandService) {
-        res.status(503).json({ error: 'Errands are not available: no channel manager is running.' });
-        return;
-      }
-
-      try {
-        res.json(toErrandJson(await errandService.approve(String(req.params.id))));
-      } catch (err) {
-        res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-      }
-    });
-
-    router.post('/errands/:id/reply', async (req: Request, res: Response) => {
-      const errandService = buildErrandService(logger, db, sessionManager);
-      if (!errandService) {
-        res.status(503).json({ error: 'Errands are not available: no channel manager is running.' });
-        return;
-      }
-
-      const answer = typeof req.body?.answer === 'string' ? req.body.answer.trim() : '';
-      if (!answer) {
-        res.status(400).json({ error: 'Missing "answer" in request body.' });
-        return;
-      }
-
-      try {
-        const result = await errandService.resumeWithPrincipalAnswer(String(req.params.id), answer);
-        res.json({
-          errand: toErrandJson(result.errand),
-          reply: result.reply,
-        });
-      } catch (err) {
-        res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-      }
-    });
-
-    router.post('/errands/:id/retry', async (req: Request, res: Response) => {
-      const errandService = buildErrandService(logger, db, sessionManager);
-      if (!errandService) {
-        res.status(503).json({ error: 'Errands are not available: no channel manager is running.' });
-        return;
-      }
-      try {
-        res.json(toErrandJson(await errandService.retryDelivery(String(req.params.id))));
-      } catch (err) {
-        res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-      }
-    });
-
-    router.post('/errands/:id/cancel', (req: Request, res: Response) => {
-      const errandService = buildErrandService(logger, db, sessionManager);
-      if (!errandService) {
-        res.status(503).json({ error: 'Errands are not available: no channel manager is running.' });
-        return;
-      }
-
-      try {
-        res.json(toErrandJson(errandService.cancel(String(req.params.id))));
-      } catch (err) {
-        res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-      }
-    });
-
-    router.post('/errands/:id/confirm', async (req: Request, res: Response) => {
-      const errandService = buildErrandService(logger, db, sessionManager);
-      if (!errandService) {
-        res.status(503).json({ error: 'Errands are not available: no channel manager is running.' });
-        return;
-      }
-      try {
-        res.json(toErrandJson(await errandService.confirmResolution(String(req.params.id))));
-      } catch (err) {
-        res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-      }
-    });
-
-    router.post('/errands/:id/close', (req: Request, res: Response) => {
-      const errandService = buildErrandService(logger, db, sessionManager);
-      if (!errandService) {
-        res.status(503).json({ error: 'Errands are not available: no channel manager is running.' });
-        return;
-      }
-
-      const result = typeof req.body?.result === 'string' && req.body.result.trim()
-        ? req.body.result.trim()
-        : 'Closed by the principal.';
-
-      try {
-        res.json(toErrandJson(errandService.resolve(String(req.params.id), result)));
-      } catch (err) {
-        res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-      }
     });
 
     router.get('/memories', (req: Request, res: Response) => {
@@ -1554,7 +1271,7 @@ class AdminRouterFactory {
         return;
       }
 
-      const errors = collectSettingsPayloadErrors(patch as Record<string, unknown>, pluginSettingsRepo);
+      const errors = collectSettingsPayloadErrors(patch as Record<string, unknown>);
       if (errors.length > 0) {
         res.status(400).json({ error: 'Invalid settings.', details: errors });
         return;

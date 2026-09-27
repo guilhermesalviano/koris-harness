@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 const ROOT = join(__dirname, '..');
@@ -106,6 +106,18 @@ function main(): void {
   }
 
   const nextVersion = bumpVersion(currentVersion, bump);
+
+  packageJson.version = nextVersion;
+  writeFileSync(PACKAGE_JSON_PATH, `${JSON.stringify(packageJson, null, 2)}\n`, 'utf-8');
+
+  console.log(`Released ${nextVersion} (${bump} bump from ${currentVersion}).`);
+  console.log(`Updated ${PACKAGE_JSON_PATH}`);
+
+  if (!existsSync(CHANGELOG_PATH)) {
+    console.log('No CHANGELOG.md found; skipping changelog update.');
+    return;
+  }
+
   const changelog = readFileSync(CHANGELOG_PATH, 'utf-8');
   const { before, unreleasedBody, after } = splitUnreleased(changelog);
 
@@ -120,12 +132,7 @@ function main(): void {
   );
   const updatedChangelog = `${before}${EMPTY_UNRELEASED}\n\n${releasedSection}${after}`.replace(/\n{3,}/g, '\n\n');
 
-  packageJson.version = nextVersion;
-  writeFileSync(PACKAGE_JSON_PATH, `${JSON.stringify(packageJson, null, 2)}\n`, 'utf-8');
   writeFileSync(CHANGELOG_PATH, updatedChangelog.endsWith('\n') ? updatedChangelog : `${updatedChangelog}\n`, 'utf-8');
-
-  console.log(`Released ${nextVersion} (${bump} bump from ${currentVersion}).`);
-  console.log(`Updated ${PACKAGE_JSON_PATH}`);
   console.log(`Updated ${CHANGELOG_PATH}`);
   console.log('Review the changes, fill in any missing notes if needed, then commit and tag.');
 }

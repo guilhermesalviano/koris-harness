@@ -24,17 +24,6 @@ describe('SessionRepository', () => {
     expect(params).toEqual(['s1', 'tui', 'tui', 'user', session.startedAt, undefined, 0, '{"foo":1}']);
   });
 
-  it('save persists a delegated session kind', () => {
-    const db = makeDb();
-    const repository = new SessionRepository(db as never);
-    const session = new Session({ id: 's1', channel: 'whatsapp', peerId: '5551234', kind: 'delegated' });
-
-    repository.save(session);
-
-    const [, params] = db.run.mock.calls[0];
-    expect(params[3]).toBe('delegated');
-  });
-
   it('update maps camelCase keys to snake_case and JSON-encodes objects', () => {
     const db = makeDb();
     const repository = new SessionRepository(db as never);
@@ -157,15 +146,15 @@ describe('SessionRepository', () => {
     expect(params).toEqual(['whatsapp', '5551234', 'user']);
   });
 
-  it('findLatestOpen respects an explicit delegated kind', () => {
+  it('findLatestOpen respects an explicit kind', () => {
     const db = makeDb();
     db.get.mockReturnValue(undefined);
     const repository = new SessionRepository(db as never);
 
-    repository.findLatestOpen({ channel: 'whatsapp', peerId: '5551234', kind: 'delegated' });
+    repository.findLatestOpen({ channel: 'whatsapp', peerId: '5551234', kind: 'user' });
 
     const [, params] = db.get.mock.calls[0];
-    expect(params).toEqual(['whatsapp', '5551234', 'delegated']);
+    expect(params).toEqual(['whatsapp', '5551234', 'user']);
   });
 
   it('findLatestOpen returns null when no row is found', () => {
@@ -204,11 +193,11 @@ describe('SessionRepository', () => {
     const db = makeDb();
     const repository = new SessionRepository(db as never);
 
-    repository.findAll(10, 0, 'delegated');
+    repository.findAll(10, 0, 'user');
 
     const [sql, params] = db.query.mock.calls[0];
     expect(sql).toContain('WHERE kind = ?');
-    expect(params).toEqual(['delegated', 10, 0]);
+    expect(params).toEqual(['user', 10, 0]);
   });
 
   it('count returns the total row count', () => {

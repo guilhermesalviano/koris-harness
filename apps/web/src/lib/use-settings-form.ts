@@ -17,7 +17,6 @@ export interface RuntimeSettings {
     WORKERS?: RuntimeAiProfile;
   };
   CHANNELS?: {
-    TELEGRAM?: { ENABLED?: boolean; BOT_TOKEN?: string; WHITELIST?: string; ALLOW_UNLISTED_SENDERS?: boolean };
     WHATSAPP?: { ENABLED?: boolean; WHITELIST?: string; ALLOW_UNLISTED_SENDERS?: boolean };
   };
   ALLOWED_DOMAINS?: string[];
@@ -37,7 +36,6 @@ export interface SettingsFormState {
   sameForBoth: boolean;
   manager: AiProfileForm;
   workers: AiProfileForm;
-  telegram: { bot_token: string; whitelist: string; allow_unlisted_senders: boolean };
   whatsapp: { whitelist: string; allow_unlisted_senders: boolean };
   allowed_domains: string[];
   personal_information: Record<string, string>;
@@ -51,7 +49,6 @@ export const DEFAULT_FORM: SettingsFormState = {
   sameForBoth: true,
   manager: { ...EMPTY_PROFILE },
   workers: { ...EMPTY_PROFILE },
-  telegram: { bot_token: '', whitelist: '', allow_unlisted_senders: false },
   whatsapp: { whitelist: '', allow_unlisted_senders: false },
   allowed_domains: [],
   personal_information: {},
@@ -90,11 +87,6 @@ export function mapRuntimeToForm(data: RuntimeSettings): SettingsFormState {
     sameForBoth,
     manager,
     workers,
-    telegram: {
-      bot_token: secretFieldDefault(data.CHANNELS?.TELEGRAM?.BOT_TOKEN),
-      whitelist: data.CHANNELS?.TELEGRAM?.WHITELIST ?? '',
-      allow_unlisted_senders: data.CHANNELS?.TELEGRAM?.ALLOW_UNLISTED_SENDERS ?? false,
-    },
     whatsapp: {
       whitelist: data.CHANNELS?.WHATSAPP?.WHITELIST ?? '',
       allow_unlisted_senders: data.CHANNELS?.WHATSAPP?.ALLOW_UNLISTED_SENDERS ?? false,
@@ -120,17 +112,10 @@ function buildProfilePatch(profile: AiProfileForm): Record<string, unknown> {
   return patch;
 }
 
-/** Channel-only slice of the settings payload (telegram/whatsapp secrets + whitelists + trust policy). */
+/** Channel-only slice of the settings payload (whatsapp secrets + whitelists + trust policy). */
 export function buildChannelsPatch(form: SettingsFormState): Record<string, unknown> {
-  const telegram: Record<string, unknown> = {
-    whitelist: form.telegram.whitelist,
-    allow_unlisted_senders: form.telegram.allow_unlisted_senders,
-  };
-  if (form.telegram.bot_token) telegram.bot_token = form.telegram.bot_token;
-
   return {
     channels: {
-      telegram,
       whatsapp: {
         whitelist: form.whatsapp.whitelist,
         allow_unlisted_senders: form.whatsapp.allow_unlisted_senders,
@@ -169,23 +154,12 @@ export function buildSettingsPatch(form: SettingsFormState): Record<string, unkn
       workers: buildProfilePatch(workers),
     },
     channels: {
-      telegram: {
-        whitelist: form.telegram.whitelist,
-        allow_unlisted_senders: form.telegram.allow_unlisted_senders,
-      },
       whatsapp: {
         whitelist: form.whatsapp.whitelist,
         allow_unlisted_senders: form.whatsapp.allow_unlisted_senders,
       },
     },
   };
-
-  if (form.telegram.bot_token) {
-    (patch.channels as Record<string, unknown>).telegram = {
-      ...(patch.channels as Record<string, Record<string, unknown>>).telegram,
-      bot_token: form.telegram.bot_token,
-    };
-  }
 
   if (form.allowed_domains.length > 0) {
     patch.allowed_domains = form.allowed_domains;
@@ -219,13 +193,6 @@ export function formatConnectionTestResult(result: ConnectionTestResult): string
     : (result.error ?? `HTTP ${result.status}`);
 }
 
-export interface TelegramTestResult {
-  ok: boolean;
-  username?: string;
-  error?: string;
-  networkError?: boolean;
-}
-
 export function useSettingsForm() {
   const [form, setForm] = useState<SettingsFormState>(DEFAULT_FORM);
   const [original, setOriginal] = useState<RuntimeSettings | null>(null);
@@ -240,8 +207,6 @@ export function useSettingsForm() {
 
   const [connectionResults, setConnectionResults] = useState<Partial<Record<'manager' | 'workers', ConnectionTestResult>>>({});
   const [testingConnection, setTestingConnection] = useState<Partial<Record<'manager' | 'workers', boolean>>>({});
-  const [telegramTestResult, setTelegramTestResult] = useState<TelegramTestResult | null>(null);
-  const [testingTelegram, setTestingTelegram] = useState(false);
   const [whatsappConnecting, setWhatsappConnecting] = useState(false);
   const [whatsappConnectResult, setWhatsappConnectResult] = useState<string | null>(null);
 
@@ -292,22 +257,6 @@ export function useSettingsForm() {
       setTestingConnection((prev) => ({ ...prev, [role]: false }));
     }
   }, [form.manager, form.workers, form.sameForBoth]);
-
-  const testTelegramToken = useCallback(async () => {
-    setTestingTelegram(true);
-    setTelegramTestResult(null);
-    try {
-      const result = await apiRequest<TelegramTestResult>('/telegram/test-token', {
-        method: 'POST',
-        body: JSON.stringify({ bot_token: form.telegram.bot_token }),
-      });
-      setTelegramTestResult(result);
-    } catch (err) {
-      setTelegramTestResult({ ok: false, error: err instanceof Error ? err.message : 'Test failed' });
-    } finally {
-      setTestingTelegram(false);
-    }
-  }, [form.telegram.bot_token]);
 
   const connectWhatsApp = useCallback(async () => {
     setWhatsappConnecting(true);
@@ -364,9 +313,6 @@ export function useSettingsForm() {
     testProviderConnection,
     connectionResults,
     testingConnection,
-    testTelegramToken,
-    telegramTestResult,
-    testingTelegram,
     connectWhatsApp,
     whatsappConnecting,
     whatsappConnectResult,

@@ -25,6 +25,6 @@
       "@constants": ["./core/src/constants"]
     }
   },
-  "include": ["core/src/**/*", "plugins/**/*", "apps/tui"],
-  "exclude": ["node_modules", "dist", "dist-web", "dist-desktop", "apps/web", "apps/desktop", "apps/tauri", "koris-hub", "plugins/channels/*/*", "plugins/channels/*/**/*", "**/*.test.ts", "**/*.spec.ts"]
+  "include": ["core/src/**/*", "plugins/**/*"],
+  "exclude": ["node_modules", "dist", "dist-web", "apps/web", "koris-hub", "plugins/channels/*/*", "plugins/channels/*/**/*", "**/*.test.ts", "**/*.spec.ts"]
 }

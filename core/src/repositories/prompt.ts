@@ -34,7 +34,7 @@ interface BuildPromptParams {
   toolsEnabled?: boolean;
   learnedSkillsEnabled?: boolean;
   messageHistory?: Message[];
-  /** Override the normal chat window for conversations such as delegated errands. */
+  /** Override the normal chat window for a session that needs a wider history. */
   historyLimit?: number;
   /** Replace the main chat policy for a specialized agent. */
   systemPrompt?: string;
@@ -42,8 +42,8 @@ interface BuildPromptParams {
   includeGlobalContext?: boolean;
   includeBeatTools?: boolean;
   sessionId?: string;
-  /** False for a delegated (errand) session: an untrusted peer must never be
-   * able to probe the principal's personal facts via long-term memory. */
+  /** False for an untrusted peer: they must never be able to probe the
+   * principal's personal facts via long-term memory. */
   includeMemory?: boolean;
   /** Situation-specific contract/instruction blocks appended to the system prompt. */
   extraSystemBlocks?: string[];

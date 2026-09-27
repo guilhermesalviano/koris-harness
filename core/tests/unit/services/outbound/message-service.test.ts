@@ -50,9 +50,9 @@ describe('OutboundMessageService', () => {
   it('sends to an explicit channel and target and marks as sent', async () => {
     const { service, channels, outboundRepo } = makeService();
 
-    const result = await service.send({ content: 'Olá!', channel: 'telegram', target: '987654321' });
+    const result = await service.send({ content: 'Olá!', channel: 'whatsapp', target: '987654321' });
 
-    expect(channels.sendMessage).toHaveBeenCalledWith('telegram', '987654321', 'Olá!');
+    expect(channels.sendMessage).toHaveBeenCalledWith('whatsapp', '987654321', 'Olá!');
     expect(outboundRepo.save).toHaveBeenCalledTimes(1);
     expect(outboundRepo.markSent).toHaveBeenCalledTimes(1);
     expect(result).toBeInstanceOf(OutboundMessage);
@@ -63,19 +63,11 @@ describe('OutboundMessageService', () => {
   it('records what was sent into the target session transcript after successful delivery', async () => {
     const { service, sessionManager, db } = makeService();
 
-    await service.send({ content: 'Olá!', channel: 'telegram', target: '987654321' });
+    await service.send({ content: 'Olá!', channel: 'whatsapp', target: '987654321' });
 
-    expect(sessionManager.getSessionService).toHaveBeenCalledWith({ channel: 'telegram', peerId: '987654321', kind: 'user' });
+    expect(sessionManager.getSessionService).toHaveBeenCalledWith({ channel: 'whatsapp', peerId: '987654321', kind: 'user' });
     // MessageService.save → MessageRepository.save issues an INSERT INTO messages.
     expect(db.run).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO messages'), expect.any(Array));
-  });
-
-  it('records into the delegated session when kind is passed through', async () => {
-    const { service, sessionManager } = makeService();
-
-    await service.send({ content: 'Hi there', channel: 'whatsapp', target: '5551234', kind: 'delegated' });
-
-    expect(sessionManager.getSessionService).toHaveBeenCalledWith({ channel: 'whatsapp', peerId: '5551234', kind: 'delegated' });
   });
 
   it('still delivers the message even if recording the transcript fails', async () => {
@@ -86,9 +78,9 @@ describe('OutboundMessageService', () => {
     });
     const { service } = makeService(channels, makeOutboundRepo(), makeDb(), sessionManager);
 
-    const result = await service.send({ content: 'Olá!', channel: 'telegram', target: '987654321' });
+    const result = await service.send({ content: 'Olá!', channel: 'whatsapp', target: '987654321' });
 
-    expect(channels.sendMessage).toHaveBeenCalledWith('telegram', '987654321', 'Olá!');
+    expect(channels.sendMessage).toHaveBeenCalledWith('whatsapp', '987654321', 'Olá!');
     expect(result.status).toBe('sent');
     expect(logger.warn).toHaveBeenCalled();
   });
@@ -100,7 +92,7 @@ describe('OutboundMessageService', () => {
       getById: vi.fn().mockReturnValue(
         new OutboundMessage({
           id: 'm1',
-          channel: 'telegram',
+          channel: 'whatsapp',
           target: '111',
           content: 'Olá',
           status: 'failed',
@@ -111,7 +103,7 @@ describe('OutboundMessageService', () => {
     });
     const { service, db, sessionManager } = makeService(channels, outboundRepo);
 
-    const result = await service.send({ content: 'Olá', channel: 'telegram', target: '111' });
+    const result = await service.send({ content: 'Olá', channel: 'whatsapp', target: '111' });
 
     expect(outboundRepo.markFailed).toHaveBeenCalledWith(expect.any(String), 'channel down');
     expect(result.status).toBe('failed');

@@ -157,17 +157,6 @@ describe('Command Handler', () => {
       expect(result.response).toContain('Usage: /allow');
     });
 
-    it('answers /exit with guidance rather than a fake exit action', async () => {
-      const tui = await handleCommand('/exit', { source: 'tui' });
-      expect(tui.handled).toBe(true);
-      expect(tui.action).toBe('none');
-      expect(tui.response).toContain('Ctrl+C');
-
-      const telegram = await handleCommand('/exit', { source: 'telegram' });
-      expect(telegram.action).toBe('none');
-      expect(telegram.response).toBeTruthy();
-    });
-
     it('should handle unknown commands', async () => {
       const result = await handleCommand('/unknown', { source: 'tui' });
       expect(result.handled).toBe(false);
@@ -182,19 +171,12 @@ describe('Command Handler', () => {
       expect(telegramResult.response).toBeTruthy();
     });
 
-    // Characterizes the `source === 'telegram'` branching called out in
-    // FINDINGS.md §2.8: today Telegram alone gets Markdown-styled command
-    // output, and every other channel (whatsapp, tui, web) gets the same
-    // copy with `*` stripped. Locking in the exact split before Phase 2's
-    // `ChannelCapabilities.markdown` replaces this identity check.
-    it('keeps literal * markdown markers only for telegram', async () => {
-      const telegramHelp = await handleCommand('/help', { source: 'telegram' });
+    it('strips literal * markdown markers for every channel', async () => {
       const whatsappHelp = await handleCommand('/help', { source: 'whatsapp' });
-      const tuiHelp = await handleCommand('/help', { source: 'tui' });
+      const webHelp = await handleCommand('/help', { source: 'web' });
 
-      expect(telegramHelp.response).toContain('*Available Commands:*');
       expect(whatsappHelp.response).not.toContain('*');
-      expect(tuiHelp.response).not.toContain('*');
+      expect(webHelp.response).not.toContain('*');
     });
   });
 
@@ -222,8 +204,8 @@ describe('Command Handler', () => {
     });
 
     it('scopes channel-specific commands to their channel', () => {
-      expect(getAvailableCommands('tui')).toContain('/exit');
-      expect(getAvailableCommands('telegram')).not.toContain('/exit');
+      expect(getAvailableCommands('web')).toContain('/help');
+      expect(getAvailableCommands('whatsapp')).toContain('/help');
     });
 
     it('includes aliases so completion resolves them', () => {

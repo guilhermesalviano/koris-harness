@@ -1,4 +1,4 @@
-export type AgentId = 'orchestrator' | 'negotiator' | 'watcher';
+export type AgentId = 'orchestrator' | 'watcher';
 
 export interface AgentDescriptor {
   id: AgentId;
@@ -22,13 +22,6 @@ export const AGENTS: readonly AgentDescriptor[] = [
     description: 'Main agent. Talks with you and delegates work to the sub-agents.',
     parentId: null,
     messageable: true,
-  },
-  {
-    id: 'negotiator',
-    name: 'Negotiator',
-    description: 'Runs errands with your contacts on your behalf.',
-    parentId: 'orchestrator',
-    messageable: false,
   },
   {
     id: 'watcher',

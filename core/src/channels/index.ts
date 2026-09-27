@@ -196,8 +196,7 @@ class ChannelsSingleton {
    * passed to getInstance after the first construction"). Fine for the one
    * production call site (`core/src/app.ts`), but it means a Vitest suite
    * that wants a second scenario with different channels in the same
-   * process needs an explicit reset. Mirrors the `_setBotUsernameForTesting`
-   * pattern already used in the Telegram plugin.
+   * process needs an explicit reset.
    */
   static resetForTesting(): void {
     ChannelsSingleton.instance = undefined as unknown as ChannelsManager;

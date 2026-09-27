@@ -1,18 +1,9 @@
-// Must run before any module-level LoggerFactory.create() calls (e.g. db-sqlite.ts).
-// Detecting --tui flag directly from argv here silences the console transport
-// globally, preventing any log output from breaking the TUI alt-screen layout.
-if (process.argv.includes('tui') || process.argv.includes('--tui')) {
-  process.env.LOG_SILENCE_CONSOLE = 'true';
-}
-
-import { startTUI } from '../../apps/tui';
 import { LoggerFactory, ILogger } from './infrastructure/logger';
 import { MessageGatewayFactory, IMessageGateway } from './services/agents/message-gateway';
 import { IHeartbeatRunner, HeartbeatSingleton } from './services/agents/sub-agents/heartbeat/runner';
 import { ChannelsSingleton, ADAPTERS, ChannelHandlerFactory, configureChannelHandler, applyChannelOverrides, type IChannelsManager } from './channels';
 import { loadChannelOverrides } from './config/channel-overrides';
-import { SHUTDOWN_SIGNALS } from './constants/tui';
-import { hasFlag, logError } from './utils/runtime';
+import { logError } from './utils/runtime';
 import { SessionManager } from './services/session-manager';
 import { DatabaseServiceFactory } from './infrastructure/db-sqlite';
 import { HeartbeatRepositoryFactory } from './repositories/heartbeat';
@@ -32,7 +23,7 @@ import { ToolSyncSingleton } from './services/tools/tool-sync';
 import { config } from './config';
 import path from 'node:path';
 import type { PluginContext } from '../../plugins/channels/contracts';
-import type { ErrandRecord, IErrandsGateway, ToolPluginContext } from '../../plugins/tools/contracts';
+import type { ToolPluginContext } from '../../plugins/tools/contracts';
 import type { McpPluginContext } from '../../plugins/mcps/contracts';
 import { IDatabaseService } from './infrastructure/db-sqlite';
 import { Heartbeat } from './entities/heartbeat';
@@ -47,12 +38,9 @@ import { listInstalledChannelNames } from './services/commands/channels';
 import { getAudioTranscriptionService } from './services/audio/audio-transcription-service';
 import { McpManagerSingleton } from './services/mcps/mcp-manager';
 import { McpSyncSingleton } from './services/mcps/mcp-sync';
-import { buildErrandService } from './services/errands';
-import { startErrand } from './services/errands/start';
-import type { Errand } from './entities/errand';
 
 const logger = LoggerFactory.create();
-const MODES = ['tui', 'web'] as const;
+const SHUTDOWN_SIGNALS = ['SIGINT', 'SIGTERM'];
 
 function createPluginContext(logger: ILogger, gateway: IMessageGateway, db: IDatabaseService): PluginContext {
   const pluginSettingsRepo = PluginSettingsRepositoryFactory.create(db);
@@ -64,48 +52,6 @@ function createPluginContext(logger: ILogger, gateway: IMessageGateway, db: IDat
       isEnabled: (name) => resolvePluginEnabled(pluginSettingsRepo, 'channels', name),
     },
     audioTranscriber: getAudioTranscriptionService(logger),
-  };
-}
-
-function toErrandRecord(errand: Errand): ErrandRecord {
-  return {
-    id: errand.id,
-    goal: errand.goal,
-    state: errand.state,
-    originSessionId: errand.originSessionId,
-    pendingMessage: errand.pendingMessage,
-    deliveryIncomplete: Boolean(errand.pendingDelivery),
-    deliveryError: errand.pendingDelivery?.error,
-    notes: errand.notes,
-    result: errand.result,
-    createdAt: errand.createdAt,
-  };
-}
-
-function createErrandsGateway(logger: ILogger, db: IDatabaseService): IErrandsGateway {
-  const resolve = () => {
-    const sessionManager = new SessionManager(db);
-    const errandService = buildErrandService(logger, db, sessionManager);
-    if (!errandService) throw new Error('Errands are not available: no channel manager is running.');
-    return { sessionManager, errandService };
-  };
-  return {
-    listForSession: (sessionId) => resolve().errandService.listByOrigin(sessionId).map(toErrandRecord),
-    start: async (input) => {
-      const { sessionManager, errandService } = resolve();
-      const { errand, openingMessage } = await startErrand(logger, db, sessionManager, errandService, input);
-      return { errand: toErrandRecord(errand), openingMessage };
-    },
-    approve: async (id) => toErrandRecord(await resolve().errandService.approve(id)),
-    retry: async (id) => toErrandRecord(await resolve().errandService.retryDelivery(id)),
-    answer: async (id, answer) => {
-      const { errand, reply } = await resolve().errandService.resumeWithPrincipalAnswer(id, answer);
-      return { errand: toErrandRecord(errand), reply };
-    },
-    confirm: async (id) => toErrandRecord(await resolve().errandService.confirmResolution(id)),
-    close: async (id, result) => toErrandRecord(resolve().errandService.resolve(id, result)),
-    cancel: async (id) => toErrandRecord(resolve().errandService.cancel(id)),
-    followUrl: () => `${config.GATEWAY_HOST.replace(/\/+$/, '')}/admin/agents/negotiator`,
   };
 }
 
@@ -162,7 +108,6 @@ function createToolPluginContext(logger: ILogger, db: IDatabaseService): ToolPlu
       getById: (id) => StickerRulesRepositoryFactory.create(db).getById(id),
       deleteById: (id) => StickerRulesRepositoryFactory.create(db).deleteById(id),
     },
-    errands: createErrandsGateway(logger, db),
     security: {
       gateUrl: gateErrorForUrl,
     },
@@ -215,9 +160,6 @@ async function checkAndLogVoiceServerConnectivity(logger: ILogger): Promise<void
   }
 }
 
-type Mode = typeof MODES[number];
-type RuntimeModes = Record<Mode, boolean>;
-
 interface IRuntime {
   gateway: IMessageGateway;
   channels: IChannelsManager;
@@ -235,12 +177,11 @@ class Application implements IApplication {
 
   constructor(
     private readonly logger: ILogger,
-    private readonly source: Mode = resolveSessionSourceFromArgs(),
-    private readonly modes: RuntimeModes = resolveRuntimeModes(),
+    private readonly source: string = 'web',
     private readonly webListen: WebListenOptions | undefined = undefined,
   ) {}
 
-  /** The port the web dashboard is bound to (0 before `start`/`startEmbedded`). */
+  /** The port the web dashboard is bound to (0 before `start`). */
   get webPort(): number {
     return this.runtime?.webServer?.port ?? 0;
   }
@@ -248,17 +189,6 @@ class Application implements IApplication {
   async start(): Promise<void> {
     this.runtime = await this.createCliRuntime();
     this.registerShutdownHandlers();
-    this.startTuiIfEnabled();
-  }
-
-  /**
-   * Like `start()` but for running inside a host process (the Electron desktop
-   * app): the host owns the process lifecycle, so no signal / `beforeExit`
-   * handlers are installed. Call `stop()` from the host's shutdown hook.
-   */
-  async startEmbedded(): Promise<void> {
-    this.runtime = await this.createCliRuntime();
-    this.startTuiIfEnabled();
   }
 
   async stop(reason = 'stop'): Promise<void> {
@@ -336,9 +266,7 @@ class Application implements IApplication {
     void checkAndLogVoiceServerConnectivity(this.logger);
 
     try {
-      const webServer = this.modes.web
-        ? await DashboardServerFactory.create(this.logger, gateway, db, sessionManager, this.webListen).start()
-        : null;
+      const webServer = await DashboardServerFactory.create(this.logger, gateway, db, sessionManager, this.webListen).start();
 
       return { gateway, channels, heartbeat, webServer };
     } catch (error) {
@@ -347,24 +275,6 @@ class Application implements IApplication {
       await mcpManager.stopAll();
       throw error;
     }
-  }
-
-  private startTuiIfEnabled(): void {
-    if (!this.runtime || !this.modes.tui) {
-      return;
-    }
-
-    const { gateway } = this.runtime;
-
-    startTUI({
-      title: 'koris',
-      showHints: false,
-      placeholder: 'Type /help for commands.',
-      onInput: async (input: string) => gateway.handle(input, 'tui', {
-        toolsEnabled: true,
-        learnedSkillsEnabled: true,
-      }),
-    });
   }
 
   private registerShutdownHandlers(): void {
@@ -404,63 +314,6 @@ class Application implements IApplication {
       process.exit(exitCode);
     }
   }
-}
-
-function resolveRuntimeModes(argv: string[] = process.argv): RuntimeModes {
-  const explicitModes = MODES.reduce<RuntimeModes>((modes, mode) => {
-    modes[mode] = hasFlag(mode, argv);
-    return modes;
-  }, { tui: false, web: false });
-
-  if (Object.values(explicitModes).some(Boolean)) {
-    return explicitModes;
-  }
-
-  return {
-    tui: false,
-    web: true,
-  };
-}
-
-function resolveSessionSourceFromArgs(argv: string[] = process.argv): Mode {
-  const modesArg = resolveRuntimeModes(argv);
-
-  for (const mode of MODES) {
-    if (modesArg[mode]) {
-      return mode;
-    }
-  }
-
-  return 'web';
-}
-
-export interface ServerHandle {
-  /** The loopback port the web dashboard is listening on. */
-  port: number;
-  /** Stop the web server, channels, heartbeat and skill sync. */
-  stop(): Promise<void>;
-}
-
-export interface StartServerOptions {
-  /** Defaults to `{ tui: false, web: true }`. */
-  modes?: Partial<RuntimeModes>;
-  /** Bind overrides for the dashboard, e.g. `{ host: '127.0.0.1', port: 0 }`. */
-  webListen?: WebListenOptions;
-}
-
-/**
- * Start the koris runtime inside the current process and return a handle to
- * stop it. Used by the Electron desktop app to run the server in-process
- * instead of spawning `node dist/core/src/app.js`. Installs no signal handlers.
- */
-export async function startServer(options: StartServerOptions = {}): Promise<ServerHandle> {
-  const modes: RuntimeModes = { tui: false, web: true, ...options.modes };
-  const application = new Application(logger, 'web', modes, options.webListen);
-  await application.startEmbedded();
-  return {
-    port: application.webPort,
-    stop: () => application.stop('embedded-host'),
-  };
 }
 
 const app = new Application(logger);

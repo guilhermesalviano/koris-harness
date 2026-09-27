@@ -1,7 +1,7 @@
 import { generateId } from "../utils/generate-id";
 import { nowISO } from "../utils/date";
 
-export const CHANNEL_TYPES = ['telegram', 'whatsapp'] as const;
+export const CHANNEL_TYPES = ['whatsapp'] as const;
 export type ChannelType = typeof CHANNEL_TYPES[number];
 
 export class Channel {

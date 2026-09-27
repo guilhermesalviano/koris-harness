@@ -17,23 +17,23 @@ function deferred<T>() {
 }
 
 describe('chat history reconciliation', () => {
-  it('receives errand notices when the latest-200 window has the same length', () => {
+  it('receives background notices when the latest-200 window has the same length', () => {
     const history = Array.from({ length: 200 }, (_, i) => saved(`m${i}`, `message ${i}`, 'assistant', i));
     const current = mapMessages(history);
-    const notice = saved('errand-result', 'Errand resolved: booked for Saturday.', 'assistant', 201);
+    const notice = saved('background-result', 'Task resolved: booked for Saturday.', 'assistant', 201);
     const merged = mergeMessages(current, [...history.slice(1), notice]);
 
     expect(merged).toHaveLength(201);
     expect(merged[0]).toBe(current[0]);
-    expect(merged[merged.length - 1]?.serverId).toBe('errand-result');
+    expect(merged[merged.length - 1]?.serverId).toBe('background-result');
     expect(merged[merged.length - 1]?.content).toContain('booked for Saturday');
     expect(mergeMessages(merged, [...history.slice(1), notice])).toBe(merged);
   });
 
   it('reconciles optimistic replies by identity without duplicating them or hiding notices', () => {
     const old = saved('old');
-    const user = local('/errand approve e1', 'user');
-    const reply = local('Errand is awaiting_peer');
+    const user = local('/help', 'user');
+    const reply = local('Reply pending');
     const current = [...mapMessages([old]), user, reply];
     const merged = mergeMessages(current, [
       old,
@@ -51,7 +51,7 @@ describe('chat history reconciliation', () => {
   it('preserves pending replies and local request failures when shorter history gains a notice', () => {
     const pending = local('Still thinking', 'assistant', { pending: true });
     const failure = local('Network failed', 'assistant', { error: true });
-    const merged = mergeMessages([pending, failure], [saved('notice', 'Errand needs your input')]);
+    const merged = mergeMessages([pending, failure], [saved('notice', 'Task needs your input')]);
     expect(merged).toContain(pending);
     expect(merged).toContain(failure);
     expect(merged.some((m) => m.serverId === 'notice')).toBe(true);

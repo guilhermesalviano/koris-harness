@@ -47,13 +47,6 @@ export type ProcessOptions = {
   channel?: string;
   /** Skill documentation loaded for this turn only, by a `/<skill>` command. */
   skillBlocks?: string[];
-  /** Forwarded from `InboundChannelMessage.isTrustedSender` so the gateway can
-   * route an untrusted peer with an active errand to the negotiator instead
-   * of the principal's own session. Undefined (web/tui) is treated as trusted. */
-  isTrustedSender?: boolean;
-  /** Forwarded from `InboundChannelMessage.peerAliases` so an errand addressed
-   * to one of the contact's other addresses still matches their reply. */
-  peerAliases?: string[];
 };
 
 export type InboundInput = string | { text: string; images?: ImageAttachment[]; stickers?: StickerReference[] };
@@ -64,11 +57,10 @@ export interface IMessageGateway {
 
 /**
  * What a channel can actually do, so core can degrade behavior once instead
- * of branching on channel identity (see AGENTS.md / FINDINGS.md §2.8 for the
- * `source === 'telegram'` conditionals this is meant to eventually replace).
- * Optional on `ChannelDefinition` for now — additive; neither plugin declares
- * it yet, and everything that reads it must treat its absence as "assume the
- * least capable channel" (no streaming, no markdown, no interactive buttons).
+ * of branching on channel identity. Optional on `ChannelDefinition` for now —
+ * additive; neither plugin declares it yet, and everything that reads it must
+ * treat its absence as "assume the least capable channel" (no streaming, no
+ * markdown, no interactive buttons).
  */
 export interface ChannelCapabilities {
   /** Can this channel edit a message it already sent, in place? */
@@ -156,26 +148,18 @@ export interface InboundChannelMessage {
   isTrustedSender: boolean;
   groupName?: string;
   /**
-   * The channel's own id for this specific message (Telegram `message_id`,
-   * Baileys `key.id`) — optional today; needed for the dedupe work in
-   * FINDINGS.md §3.4 (Baileys replays `messages.upsert` after reconnect).
-   * Neither plugin sets this yet.
+   * The channel's own id for this specific message (e.g. Baileys `key.id`) —
+   * optional today; needed for the dedupe work (Baileys replays
+   * `messages.upsert` after reconnect). Neither plugin sets this yet.
    */
   externalId?: string;
   /**
-   * The channel's native conversation id (Telegram chat id, WhatsApp JID) —
+   * The channel's native conversation id (e.g. a WhatsApp JID) —
    * optional today, distinct from the `target`/`originId` string `handle()`
    * already receives, for cases where a message needs to carry its own
    * conversation identity independent of the delivery target.
    */
   conversationId?: string;
-  /**
-   * Other addresses the same sender is known by on this channel, besides the
-   * `target` passed to `handle()` — e.g. the phone-number JID
-   * (`<n>@s.whatsapp.net`) of a WhatsApp message that arrived under a LID
-   * (`<n>@lid`). Lets core match a reply to an errand sent to the other form.
-   */
-  peerAliases?: string[];
 }
 
 export interface ChannelReply {

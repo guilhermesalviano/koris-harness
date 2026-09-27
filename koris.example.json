@@ -14,11 +14,6 @@
     "summarizer_mode": "manual",
     "compact_threshold": 0.9
   },
-  "errands": {
-    "hard_expiry_ms": 604800000,
-    "history_limit": 100,
-    "max_concurrent": 10
-  },
   "ai": {
     "parallel": false,
     "background_grace_ms": 5000,

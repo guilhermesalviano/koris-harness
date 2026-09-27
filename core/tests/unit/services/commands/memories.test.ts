@@ -73,9 +73,9 @@ describe('handleMemoriesCommand', () => {
     expect(repo.countAll).toHaveBeenCalledWith('lesson');
     expect(result.handled).toBe(true);
     expect(result.action).toBe('none');
-    expect(result.response).toContain('*Memories* (newest 1 of 12 lesson memories)');
+    expect(result.response).toContain('Memories (newest 1 of 12 lesson memories)');
     expect(result.response).toContain('[lesson] · 2026-09-01 10:30 · importance 4');
-    expect(result.response).toContain('Prefers *morning* meetings');
+    expect(result.response).toContain('Prefers morning meetings');
     expect(result.response).toContain('#calendar #habits');
   });
 

@@ -7,7 +7,7 @@ import { hasSpecificHour, isEveryMinute, isOneTimeCron, isValidCronExpression } 
 export const TOOL_NAME = 'set_beat' as const;
 
 const BEAT_TYPES = ['reminder', 'scheduled_beat'] as const;
-const CHANNEL_TYPES = ['telegram', 'whatsapp'] as const;
+const CHANNEL_TYPES = ['whatsapp'] as const;
 
 export async function setBeat(
   logger: ILogger,
@@ -149,7 +149,7 @@ export function create(context: ToolPluginContext): Plugin {
           },
           target: {
             type: 'string',
-            description: 'Optional: recipient address (Telegram chat id or WhatsApp JID) to use instead of the current chat. Must be provided together with channel.',
+            description: 'Optional: recipient address (WhatsApp JID) to use instead of the current chat. Must be provided together with channel.',
           },
         },
         handler: (logger, args) => setBeat(logger, args, context.heartbeats),

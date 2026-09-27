@@ -5,7 +5,7 @@ import { Heartbeat } from '../../../src/entities/heartbeat';
 
 function makeChannel(overrides: Partial<ConstructorParameters<typeof Channel>[0]> = {}): Channel {
   return new Channel({
-    channel: 'telegram',
+    channel: 'whatsapp',
     target: '987654321',
     isPrincipal: false,
     ...overrides,
@@ -37,12 +37,12 @@ describe('ChannelService', () => {
     const repo = makeRepo();
     const service = new ChannelService(repo as never);
 
-    service.record('telegram', '987654321');
+    service.record('whatsapp', '987654321');
 
-    expect(repo.upsert).toHaveBeenCalledWith('telegram', '987654321');
+    expect(repo.upsert).toHaveBeenCalledWith('whatsapp', '987654321');
   });
 
-  it('record ignores non-telegram/whatsapp channels', () => {
+  it('record ignores non-whatsapp channels', () => {
     const repo = makeRepo();
     const service = new ChannelService(repo as never);
 
@@ -55,7 +55,7 @@ describe('ChannelService', () => {
     const repo = makeRepo();
     const service = new ChannelService(repo as never);
 
-    service.record('telegram', '');
+    service.record('whatsapp', '');
 
     expect(repo.upsert).not.toHaveBeenCalled();
   });
@@ -137,11 +137,11 @@ describe('ChannelService', () => {
   });
 
   it('resolveDelivery falls back to the principal channel when the beat has no channel', () => {
-    const principal = makeChannel({ channel: 'telegram', target: '111', isPrincipal: true });
+    const principal = makeChannel({ channel: 'whatsapp', target: '111', isPrincipal: true });
     const repo = makeRepo({ principal });
     const service = new ChannelService(repo as never);
 
-    expect(service.resolveDelivery(makeBeat())).toEqual({ channel: 'telegram', target: '111' });
+    expect(service.resolveDelivery(makeBeat())).toEqual({ channel: 'whatsapp', target: '111' });
   });
 
   it('resolveDelivery returns null when no principal is recorded', () => {

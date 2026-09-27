@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 // importing it doesn't load the whole admin UI (and its coverage) into the run.
 vi.mock('./GeneralPage', () => ({ default: () => null }));
 vi.mock('./SessionsPage', () => ({ default: () => null }));
-vi.mock('./ErrandsPage', () => ({ default: () => null }));
 vi.mock('./PluginsPage', () => ({ default: () => null }));
 vi.mock('./ProvidersPage', () => ({ default: () => null }));
 vi.mock('./ChannelsPage', () => ({ default: () => null }));
@@ -15,7 +14,6 @@ vi.mock('../../components/Modal', () => ({ default: () => null }));
 vi.mock('../../components/Icons', () => ({
   ChannelsIcon: () => null,
   CloseIcon: () => null,
-  ErrandsIcon: () => null,
   HeartbeatsIcon: () => null,
   MemoriesIcon: () => null,
   PluginsIcon: () => null,
@@ -29,9 +27,9 @@ vi.mock('../../lib/config-save-context', () => ({ useSaveCoordinator: vi.fn(), u
 import { SECTIONS } from './ConfigModal';
 
 describe('ConfigModal sections and navigation', () => {
-  it('defines all 9 standard workspace configuration sections', () => {
+  it('defines all 8 standard workspace configuration sections', () => {
     const ids = SECTIONS.map((s) => s.id);
-    expect(ids).toEqual(['general', 'sessions', 'errands', 'plugins', 'providers', 'channels', 'skills', 'memories', 'beats']);
+    expect(ids).toEqual(['general', 'sessions', 'plugins', 'providers', 'channels', 'skills', 'memories', 'beats']);
   });
 
   it('provides non-empty labels, descriptions, icons, and component mappings for all sections', () => {

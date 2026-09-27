@@ -140,12 +140,13 @@ describe('usage engine', () => {
     expect(report.byTool['unknown'].toolCalls).toBe(1);
   });
 
-  it('formatUsageReport keeps markdown for telegram', () => {
+  it('formatUsageReport strips markdown for every channel', () => {
     const report = buildUsageReport([llmRow(), toolRow()]);
-    const text = formatUsageReport(report, 'telegram');
+    const text = formatUsageReport(report, 'whatsapp');
 
-    expect(text).toContain('*Token Usage*');
-    expect(text).toContain('*By Tool*');
+    expect(text).not.toContain('*');
+    expect(text).toContain('Token Usage');
+    expect(text).toContain('By Tool');
     expect(text).toContain('tok');
   });
 

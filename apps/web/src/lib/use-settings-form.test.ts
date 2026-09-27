@@ -14,30 +14,25 @@ describe('use-settings-form: allow_unlisted_senders', () => {
   it('maps ALLOW_UNLISTED_SENDERS from the runtime snapshot into the form', () => {
     const form = mapRuntimeToForm({
       CHANNELS: {
-        TELEGRAM: { WHITELIST: '1', ALLOW_UNLISTED_SENDERS: true },
         WHATSAPP: { WHITELIST: '2', ALLOW_UNLISTED_SENDERS: false },
       },
     });
-    expect(form.telegram.allow_unlisted_senders).toBe(true);
     expect(form.whatsapp.allow_unlisted_senders).toBe(false);
   });
 
   it('defaults allow_unlisted_senders to false when the snapshot omits it', () => {
-    const form = mapRuntimeToForm({ CHANNELS: { TELEGRAM: { WHITELIST: '1' } } });
-    expect(form.telegram.allow_unlisted_senders).toBe(false);
+    const form = mapRuntimeToForm({ CHANNELS: { WHATSAPP: { WHITELIST: '1' } } });
     expect(form.whatsapp.allow_unlisted_senders).toBe(false);
   });
 
-  it('emits allow_unlisted_senders for both channels in the channels patch', () => {
+  it('emits allow_unlisted_senders in the channels patch', () => {
     const form = {
       ...DEFAULT_FORM,
-      telegram: { ...DEFAULT_FORM.telegram, allow_unlisted_senders: true },
       whatsapp: { ...DEFAULT_FORM.whatsapp, allow_unlisted_senders: false },
     };
     const patch = buildChannelsPatch(form) as {
-      channels: { telegram: Record<string, unknown>; whatsapp: Record<string, unknown> };
+      channels: { whatsapp: Record<string, unknown> };
     };
-    expect(patch.channels.telegram.allow_unlisted_senders).toBe(true);
     expect(patch.channels.whatsapp.allow_unlisted_senders).toBe(false);
   });
 });
@@ -137,12 +132,8 @@ describe('mapRuntimeToForm & buildSettingsPatch branches', () => {
       AI: {
         MANAGER: { PROVIDER: 'openai', API_TOKEN: '••••masked••••' },
       },
-      CHANNELS: {
-        TELEGRAM: { BOT_TOKEN: '••••bot••••' },
-      },
     });
     expect(form.manager.api_token).toBe('');
-    expect(form.telegram.bot_token).toBe('');
   });
 
   it('builds full settings patch with tokens, domains, and personal information', () => {
@@ -150,7 +141,6 @@ describe('mapRuntimeToForm & buildSettingsPatch branches', () => {
       ...DEFAULT_FORM,
       sameForBoth: true,
       manager: { provider: 'openai', base_url: 'https://api.openai.com', api_token: 'secret-token', model: 'gpt-4o', num_ctx: '16000' },
-      telegram: { bot_token: '12345:ABC', whitelist: 'admin', allow_unlisted_senders: true },
       whatsapp: { whitelist: 'all', allow_unlisted_senders: false },
       allowed_domains: ['api.example.com'],
       personal_information: { name: 'Koris' },
@@ -159,7 +149,6 @@ describe('mapRuntimeToForm & buildSettingsPatch branches', () => {
     const patch = buildSettingsPatch(form) as any;
     expect(patch.ai.manager.api_token).toBe('secret-token');
     expect(patch.ai.workers.api_token).toBe('secret-token');
-    expect(patch.channels.telegram.bot_token).toBe('12345:ABC');
     expect(patch.allowed_domains).toEqual(['api.example.com']);
     expect(patch.personal_information).toEqual({ name: 'Koris' });
   });

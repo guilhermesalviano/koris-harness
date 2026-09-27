@@ -4,7 +4,6 @@ import { handleSkillsCommand, isSkillCommand, listSkillCommands, resolveSkillCom
 import { handleToolsCommand } from './tools';
 import { handleChannelsCommand } from './channels';
 import { handleMcpsCommand } from './mcps';
-import { handleErrandCommand } from './errands';
 import { handleMemoriesCommand } from './memories';
 import { formatCommandResult, formatMessage } from './format';
 import { addAllowedDomain } from '../security/allowed-domains';
@@ -22,7 +21,6 @@ export { handleSkillsCommand, isSkillCommand, listSkillCommands, listSkills, res
 export { handleToolsCommand, listTools } from './tools';
 export { handleChannelsCommand, listChannels, listInstalledChannelNames } from './channels';
 export { handleMcpsCommand, listInstalledMcpNames } from './mcps';
-export { handleErrandCommand } from './errands';
 export { handleMemoriesCommand } from './memories';
 export { formatCommandResult, formatMessage } from './format';
 
@@ -32,7 +30,7 @@ export async function handleCommand(command: string, context: CommandContext): P
       return handleHelp(command, context);
 
     case '/status':
-      return handleStatus(context);
+      return handleStatus();
 
     case '/usage':
       return handleUsageCommand(command, context);
@@ -48,10 +46,10 @@ export async function handleCommand(command: string, context: CommandContext): P
 
     case '/clear':
     case '/reset':
-      return handleClear(context);
+      return handleClear();
 
     case '/compact':
-      return handleCompact(context);
+      return handleCompact();
 
     case '/mode':
       return handleMode(command);
@@ -71,16 +69,8 @@ export async function handleCommand(command: string, context: CommandContext): P
     case '/mcps':
       return handleMcpsCommand(command, context);
 
-    case '/errand':
-      return handleErrandCommand(command, context);
-
     case '/skill':
       return handleSkill(command, context);
-
-    case '/exit':
-    case '/quit':
-    case '/bye':
-      return handleExit(context);
 
     default: {
       const skill = resolveSkillCommand(command);
@@ -186,20 +176,7 @@ Send me any message to interact!`;
   return formatCommandResult(message, context.source);
 }
 
-function handleStatus(context: CommandContext): CommandResult {
-  if (context.source === 'telegram') {
-    return {
-      response: `✅ *Bot Status*
-
-• Connection: Active
-• AI Provider: *${config.AI.MANAGER.PROVIDER}*
-• Model: *${config.AI.MANAGER.MODEL}*
-• Session mode: *${config.SESSION.SUMMARIZER_MODE}*`,
-      action: 'none',
-      handled: true,
-    };
-  }
-
+function handleStatus(): CommandResult {
   return {
     response: `Status:
 
@@ -229,20 +206,12 @@ function handleWhoami(context: CommandContext): CommandResult {
   return formatCommandResult(lines.join('\n'), context.source);
 }
 
-function handleClear(context: CommandContext): CommandResult {
-  const response = context.source === 'telegram'
-    ? '🗑️ Cleared. Starting a fresh session.'
-    : 'Cleared. Starting a fresh session.';
-
-  return { response, action: 'clear', handled: true };
+function handleClear(): CommandResult {
+  return { response: 'Cleared. Starting a fresh session.', action: 'clear', handled: true };
 }
 
-function handleCompact(context: CommandContext): CommandResult {
-  const response = context.source === 'telegram'
-    ? '🗜️ Compacting session — starting a fresh one with a summary of what we covered.'
-    : 'Compacting session — starting a fresh one with a summary of what we covered.';
-
-  return { response, action: 'compact', handled: true };
+function handleCompact(): CommandResult {
+  return { response: 'Compacting session — starting a fresh one with a summary of what we covered.', action: 'compact', handled: true };
 }
 
 function handleMode(command: string): CommandResult {
@@ -283,16 +252,6 @@ function handleAllow(command: string, context: CommandContext): CommandResult {
     : `${result.hostname} is already in allowed_domains.`;
   return formatCommandResult(message, context.source);
 }
-
-function handleExit(context: CommandContext): CommandResult {
-  const response = context.source === 'telegram'
-    ? 'This bot stays running. Use /clear to start a fresh session.'
-    : 'To leave koris, press Ctrl+C. Use /clear to start a fresh session.';
-
-  return { response: formatMessage(response, context.source), action: 'none', handled: true };
-}
-
-
 
 /**
  * Whether a message names a command koris handles. Matches the known command

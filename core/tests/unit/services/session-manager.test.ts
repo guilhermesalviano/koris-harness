@@ -31,19 +31,6 @@ describe('SessionManager', () => {
   });
 
   describe('getSessionService (composite key)', () => {
-    it('reopens a delegated conversation from storage after idle TTL without losing its transcript', () => {
-      const repo = makeRepo();
-      const existing = new Session({
-        id: 'negotiation', channel: 'whatsapp', peerId: '555', kind: 'delegated',
-        startedAt: '2000-01-01T00:00:00.000Z', metadata: { lastActivityAt: '2000-01-01T00:00:00.000Z' },
-      });
-      repo.findLatestOpen.mockReturnValue(existing);
-      vi.mocked(SessionRepositoryFactory.create).mockReturnValue(repo as never);
-      const service = new SessionManager({} as never).getSessionService({ channel: 'whatsapp', peerId: '555', kind: 'delegated' });
-      expect(service.ensureActiveSession().id).toBe('negotiation');
-      expect(repo.save).not.toHaveBeenCalled();
-      expect(repo.rotate).not.toHaveBeenCalled();
-    });
     it('creates a new session when none is open, keyed by channel+peerId+kind', () => {
       const repo = makeRepo();
       vi.mocked(SessionRepositoryFactory.create).mockReturnValue(repo as any);
@@ -115,20 +102,6 @@ describe('SessionManager', () => {
       expect(repo.findLatestOpen).toHaveBeenCalledTimes(1);
     });
 
-    it('treats a "user" and "delegated" session with the same channel/peerId as distinct', () => {
-      const repo = makeRepo();
-      vi.mocked(SessionRepositoryFactory.create).mockReturnValue(repo as any);
-
-      const manager = new SessionManager({} as any);
-      const userSvc = manager.getSessionService({ channel: 'whatsapp', peerId: '555', kind: 'user' });
-      const delegatedSvc = manager.getSessionService({ channel: 'whatsapp', peerId: '555', kind: 'delegated' });
-
-      expect(userSvc).not.toBe(delegatedSvc);
-      expect(userSvc.getSession().kind).toBe('user');
-      expect(delegatedSvc.getSession().kind).toBe('delegated');
-      expect(repo.findLatestOpen).toHaveBeenCalledTimes(2);
-    });
-
     it('a different peerId on the same channel is cached separately', () => {
       const repo = makeRepo();
       vi.mocked(SessionRepositoryFactory.create).mockReturnValue(repo as any);
@@ -138,37 +111,6 @@ describe('SessionManager', () => {
       const b = manager.getSessionService({ channel: 'whatsapp', peerId: 'bob' });
 
       expect(a).not.toBe(b);
-    });
-
-    it('a delegated session defaults rotateOnExpire to false (never rotates on idle TTL)', () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2024-06-01T12:00:00.000Z'));
-
-      const freshDelegated = new Session({
-        id: 'fresh-delegated',
-        channel: 'whatsapp',
-        peerId: '555',
-        kind: 'delegated',
-        startedAt: '2024-06-01T11:59:00.000Z',
-        metadata: { lastActivityAt: '2024-06-01T11:59:00.000Z' },
-      });
-      const repo = makeRepo();
-      repo.findLatestOpen.mockReturnValue(freshDelegated);
-      vi.mocked(SessionRepositoryFactory.create).mockReturnValue(repo as any);
-
-      const manager = new SessionManager({} as any);
-      // Resolved while still fresh, so the manager reuses `freshDelegated` —
-      // rather than transparently creating yet another new session — and
-      // caches this SessionService instance bound to it.
-      const service = manager.getSessionService({ channel: 'whatsapp', peerId: '555', kind: 'delegated' });
-      expect(service.getSession().id).toBe('fresh-delegated');
-
-      // Time now passes well beyond the TTL on the *same cached instance*.
-      vi.setSystemTime(new Date('2024-06-02T12:00:00.000Z'));
-      const result = service.ensureActiveSession();
-
-      expect(result.id).toBe('fresh-delegated');
-      expect(repo.rotate).not.toHaveBeenCalled();
     });
 
     it('a user session still rotates on idle TTL (rotateOnExpire default true)', () => {

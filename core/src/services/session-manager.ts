@@ -41,7 +41,7 @@ export class SessionManager implements ISessionManager {
 
     let sessionService: ISessionService;
 
-    if (existing && (existing.kind === 'delegated' || !isExpired(existing, config.SESSION.TTL_MS))) {
+    if (existing && !isExpired(existing, config.SESSION.TTL_MS)) {
       sessionService = new SessionService(this.sessionRepository, existing, { persistOnConstruct: false });
     } else {
       const session = new Session({

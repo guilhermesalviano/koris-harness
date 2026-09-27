@@ -9,7 +9,7 @@
  * point, which registers the *AI agent's* tools.
  */
 
-export type CommandChannel = 'tui' | 'web' | 'telegram' | 'whatsapp';
+export type CommandChannel = 'web' | 'whatsapp';
 
 export interface CommandSpec {
   /** Canonical name, always slash-prefixed and lowercase, e.g. `/help`. */
@@ -143,27 +143,6 @@ export const SLASH_COMMANDS: readonly CommandSpec[] = [
       'Only in `skills.mode: "manual"`, where skill documentation is kept out of ' +
       'the prompt until asked for. `/<skill-name> <request>` is the same thing in ' +
       'short form. `/help` lists the skills available as commands.',
-  },
-  {
-    name: '/errand',
-    summary: 'Start or manage a delegated conversation with someone else',
-    usage: '/errand [<goal> with <contact> on <channel>|approve <id>|reply <id> <answer>|resolve <id>|retry <id>|close <id>|cancel <id>]',
-    trusted: true,
-    details:
-      'Without arguments, lists errands started from this session. ' +
-      '`/errand <goal> with <contact> on <channel>` stages a new errand as a draft — ' +
-      'it does nothing until approved. `/errand approve <id>` sends the opening message ' +
-      'and starts the negotiation; koris then drives it autonomously, escalating back to ' +
-      'you when it needs your input. When the goal looks achieved it waits for you: ' +
-      '`/errand resolve <id>` sends the closing message and resolves it, or `/errand reply <id> <more>` ' +
-      'asks the contact for something more. `/errand close <id>` marks it ' +
-      'resolved manually; `/errand cancel <id>` cancels it. `/errand retry <id>` retries a saved pending message only to targets that have not received it.',
-  },
-  {
-    name: '/exit',
-    aliases: ['/quit', '/bye'],
-    summary: 'How to leave the session',
-    channels: ['tui'],
   },
 ];
 

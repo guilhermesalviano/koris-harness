@@ -37,10 +37,10 @@ describe('MessageRepository', () => {
   it('spans every peer on a channel when the timeline key has no peer', () => {
     const db = makeDb([]);
     const repository = makeRepository(db);
-    repository.getTimeline({ key: { channel: 'negotiator', kind: 'user' }, limit: 10 });
+    repository.getTimeline({ key: { channel: 'web', kind: 'user' }, limit: 10 });
     const [sql, params] = db.query.mock.calls[0];
     expect(sql).not.toContain('s.peer_id = ?');
-    expect(params).toEqual(['negotiator', 'user', 11]);
+    expect(params).toEqual(['web', 'user', 11]);
   });
 
   it('fetches the latest N messages while returning them in chronological order', () => {

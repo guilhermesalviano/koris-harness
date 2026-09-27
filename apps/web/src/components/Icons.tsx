@@ -48,17 +48,6 @@ export function HeartbeatsIcon({ className }: IconProps) {
   );
 }
 
-export function ErrandsIcon({ className }: IconProps) {
-  return (
-    <svg className={className} style={svgStyle(1.7)} viewBox="0 0 24 24">
-      <path d="M17 3l4 4-4 4" />
-      <path d="M21 7H9a4 4 0 0 0-4 4v0" />
-      <path d="M7 21l-4-4 4-4" />
-      <path d="M3 17h12a4 4 0 0 0 4-4v0" />
-    </svg>
-  );
-}
-
 export function ChannelsIcon({ className }: IconProps) {
   return (
     <svg className={className} style={svgStyle(1.7)} viewBox="0 0 24 24">

@@ -47,19 +47,15 @@ function makeGatewayWithFakeAgent(mainAgentReply: string) {
   const messageService = { getHistory: vi.fn(), getSessionId: vi.fn().mockReturnValue('session-1'), save: vi.fn() };
   const memoryService = { upsert: vi.fn() };
   const mainAgent = { run: vi.fn().mockResolvedValue(mainAgentReply) };
-  const negotiator = { run: vi.fn().mockResolvedValue({ reply: 'unused', applied: 'continue' }) };
 
   const gateway = new MessageGateway(
     makeLogger(),
     'test-channel',
-    {} as never,
-    {} as never,
     { resolve: vi.fn().mockReturnValue({ sessionService, messageService, memoryService }) } as never,
     { persistConversation: vi.fn(), summarizeConversation: vi.fn() } as never,
     mainAgent as never,
     { record: vi.fn() } as never,
     { findAll: vi.fn().mockReturnValue([]) } as never,
-    negotiator as never,
   );
 
   return { gateway, mainAgent };

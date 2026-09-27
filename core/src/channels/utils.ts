@@ -30,10 +30,10 @@ export async function resolveResponse(response: unknown): Promise<string> {
 
 /**
  * Chunks `text` using a channel's own declared `maxMessageChars` instead of
- * a hardcoded limit. Both plugins currently call `splitMessage` directly
- * with their own local constant (`TELEGRAM_MESSAGE_LIMIT`/`WHATSAPP_MESSAGE_LIMIT`,
- * both 4000 today) — this is additive plumbing for Phase 3/4 to migrate onto,
- * not a change to either plugin's current chunking behavior.
+ * a hardcoded limit. A channel plugin currently calls `splitMessage` directly
+ * with its own local constant (`WHATSAPP_MESSAGE_LIMIT`, 4000 today) — this is
+ * additive plumbing to migrate onto, not a change to that plugin's current
+ * chunking behavior.
  */
 export function splitForCapabilities(text: string, capabilities: Pick<ChannelCapabilities, 'maxMessageChars'>): string[] {
   return splitMessage(text, capabilities.maxMessageChars);

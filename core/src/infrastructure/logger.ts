@@ -102,10 +102,8 @@ class LoggerFactory {
     return options;
   }
 
-  static create(silenceConsole?: boolean): ILogger {
-    // Auto-detect TUI mode from env var set before any modules load.
-    const shouldSilence = silenceConsole ?? process.env.LOG_SILENCE_CONSOLE === 'true';
-    const logger = createLogger(LoggerFactory.getOptions(shouldSilence));
+  static create(silenceConsole = false): ILogger {
+    const logger = createLogger(LoggerFactory.getOptions(silenceConsole));
     return new Logger(logger);
   }
 }

@@ -30,11 +30,11 @@ describe('message sender migration', () => {
     db = DatabaseServiceFactory.create({ filepath, verbose: false });
     const repository = MessageRepositoryFactory.create(db);
     expect(repository.getBySessionId(parent.id)[0]).toMatchObject({ id: 'old', content: 'Existing message', senderAgentId: undefined });
-    repository.save(new Message({ id: 'new', sessionId: parent.id, role: 'assistant', senderAgentId: 'negotiator', content: 'Booked.', createdAt: '2026-09-01T10:01:00.000Z' }));
+    repository.save(new Message({ id: 'new', sessionId: parent.id, role: 'assistant', senderAgentId: 'watcher', content: 'Booked.', createdAt: '2026-09-01T10:01:00.000Z' }));
     db.close();
 
     db = DatabaseServiceFactory.create({ filepath, verbose: false });
     expect(MessageRepositoryFactory.create(db).getBySessionId(parent.id).map((message) => [message.id, message.senderAgentId]))
-      .toEqual([['old', undefined], ['new', 'negotiator']]);
+      .toEqual([['old', undefined], ['new', 'watcher']]);
   });
 });

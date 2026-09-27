@@ -303,9 +303,9 @@ describe('OpenAICompatibleAIProvider', () => {
         {
           role: 'assistant',
           content: '',
-          tool_calls: [{ id: 'call_1', function: { name: 'start_errand', arguments: { goal: 'lunch' } }, extraContent }],
+          tool_calls: [{ id: 'call_1', function: { name: 'search_engine', arguments: { goal: 'lunch' } }, extraContent }],
         },
-        { role: 'tool', content: 'Tool: start_errand, Result: ok', tool_call_id: 'call_1' },
+        { role: 'tool', content: 'Tool: search_engine, Result: ok', tool_call_id: 'call_1' },
       ],
     });
 
@@ -313,7 +313,7 @@ describe('OpenAICompatibleAIProvider', () => {
     expect(body.messages[1].tool_calls[0]).toEqual({
       id: 'call_1',
       type: 'function',
-      function: { name: 'start_errand', arguments: '{"goal":"lunch"}' },
+      function: { name: 'search_engine', arguments: '{"goal":"lunch"}' },
       extra_content: extraContent,
     });
     expect(body.messages[1]).not.toHaveProperty('extraContent');
@@ -322,7 +322,7 @@ describe('OpenAICompatibleAIProvider', () => {
   it('keeps a streamed tool call\'s extra_content (Gemini thought_signature)', async () => {
     const extraContent = { google: { thought_signature: 'sig-abc' } };
     const stream = makeSSE([
-      { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'start_errand', arguments: '{}' }, extra_content: extraContent }] }, finish_reason: null }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'search_engine', arguments: '{}' }, extra_content: extraContent }] }, finish_reason: null }] },
       { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
     ]);
     globalThis.fetch = vi.fn().mockResolvedValue(

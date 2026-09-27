@@ -51,15 +51,12 @@ describe('Orchestrator timeline', () => {
     const { request, addSession, addMessage, sessions } = setup();
     const first = addSession({ startedAt: '2026-09-01T10:00:00.000Z', endedAt: '2026-09-01T10:03:30.000Z' });
     const second = addSession({ startedAt: '2026-09-01T10:04:00.000Z', metadata: { startReason: 'compact', compactSummary: 'we talked' } });
-    const telegram = new Session({ channel: 'telegram', peerId: '42' });
-    const errand = new Session({ channel: 'web', peerId: 'web', kind: 'delegated' });
-    sessions.save(telegram);
-    sessions.save(errand);
+    const whatsapp = new Session({ channel: 'whatsapp', peerId: '42' });
+    sessions.save(whatsapp);
 
     for (let minute = 0; minute < 4; minute++) addMessage(first.id, minute, `first-${minute}`);
     for (let minute = 4; minute < 7; minute++) addMessage(second.id, minute, `second-${minute}`);
-    addMessage(telegram.id, 5, 'telegram');
-    addMessage(errand.id, 5, 'errand');
+    addMessage(whatsapp.id, 5, 'whatsapp');
 
     const seen: string[] = [];
     let cursor: string | undefined;
@@ -102,14 +99,14 @@ describe('Orchestrator timeline', () => {
   it('returns subagent sender attribution in history and in older timeline pages', () => {
     const { request, addSession, addMessage, messages } = setup();
     const parent = addSession();
-    messages.save(new Message({ sessionId: parent.id, role: 'assistant', senderAgentId: 'negotiator', content: 'Booked.', createdAt: '2026-09-01T10:00:00.000Z' }));
+    messages.save(new Message({ sessionId: parent.id, role: 'assistant', senderAgentId: 'watcher', content: 'Booked.', createdAt: '2026-09-01T10:00:00.000Z' }));
     addMessage(parent.id, 1, 'Thank you');
 
-    expect(messages.getBySessionId(parent.id)[0].senderAgentId).toBe('negotiator');
+    expect(messages.getBySessionId(parent.id)[0].senderAgentId).toBe('watcher');
     const newest = request('/agents/orchestrator/timeline', 'get', { limit: '1' }).body;
     expect(newest.messages[0].senderAgentId).toBeUndefined();
     const older = request('/agents/orchestrator/timeline', 'get', { limit: '1', before: newest.nextCursor }).body;
-    expect(older.messages[0]).toMatchObject({ senderAgentId: 'negotiator', content: 'Booked.', sessionId: parent.id });
+    expect(older.messages[0]).toMatchObject({ senderAgentId: 'watcher', content: 'Booked.', sessionId: parent.id });
   });
 
   it('rejects a malformed cursor', () => {

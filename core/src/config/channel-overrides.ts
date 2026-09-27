@@ -6,7 +6,7 @@ export interface ChannelOverride {
 
 /**
  * Optional `channels.overrides` array in koris.json:
- *   { "channels": { "overrides": [{ "id": "telegram", "enabled": false }] } }
+ *   { "channels": { "overrides": [{ "id": "whatsapp", "enabled": false }] } }
  * (kept nested under a `channels` object rather than a top-level `channels`
  * array so the key can grow other channel-scoped settings later without a
  * breaking shape change.)
@@ -17,8 +17,7 @@ export interface ChannelOverride {
  * registers a `ChannelDefinition` (every channel plugin's `create()` always
  * registers one now); it cannot supply a token/authFolder a plugin needs to
  * function, so a channel with no token still won't actually start even if
- * overridden to `enabled: true` — see `createTelegramAdapter`'s `enabled()`,
- * which also requires a non-empty token. Anything on an entry besides
+ * overridden to `enabled: true`. Anything on an entry besides
  * `id`/`enabled` is ignored, not partially applied.
  */
 export function loadChannelOverrides(options?: { cwd?: string; dirname?: string }): Record<string, ChannelOverride> {

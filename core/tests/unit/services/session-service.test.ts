@@ -184,50 +184,6 @@ describe('SessionService', () => {
       expect(result.id).toBe('old-session');
       expect(repo.rotate).not.toHaveBeenCalled();
     });
-
-    it('never rotates a delegated session on idle TTL by default', () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2024-06-01T12:00:00.000Z'));
-
-      const repo = makeRepo();
-      const session = new Session({
-        id: 'delegated-session',
-        channel: 'whatsapp',
-        peerId: '5551234',
-        kind: 'delegated',
-        startedAt: '2024-01-01T00:00:00.000Z',
-        metadata: { lastActivityAt: '2024-01-01T00:00:00.000Z' },
-      });
-      const svc = new SessionService(repo as any, session, { persistOnConstruct: false });
-
-      const result = svc.ensureActiveSession();
-
-      expect(result.id).toBe('delegated-session');
-      expect(repo.rotate).not.toHaveBeenCalled();
-    });
-
-    it('an explicit rotateOnExpire: true still rotates a delegated session', () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2024-06-01T12:00:00.000Z'));
-
-      const repo = makeRepo();
-      const session = new Session({
-        id: 'delegated-session',
-        channel: 'whatsapp',
-        peerId: '5551234',
-        kind: 'delegated',
-        startedAt: '2024-01-01T00:00:00.000Z',
-        metadata: { lastActivityAt: '2024-01-01T00:00:00.000Z' },
-      });
-      const svc = new SessionService(repo as any, session, {
-        persistOnConstruct: false,
-        rotateOnExpire: true,
-      });
-
-      svc.ensureActiveSession();
-
-      expect(repo.rotate).toHaveBeenCalledTimes(1);
-    });
   });
 
   describe('forceRotate', () => {

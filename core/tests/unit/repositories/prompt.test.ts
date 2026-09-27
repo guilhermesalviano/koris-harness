@@ -58,7 +58,7 @@ describe('PromptRepository buildMemoryContext', () => {
     const memoryRepository = {
       getAll: vi.fn().mockReturnValue([
         makeMemory({ id: 'm1', source: 'whatsapp', content: 'User likes coffee.' }),
-        makeMemory({ id: 'm2', source: 'telegram', content: 'Lives in SP.' }),
+        makeMemory({ id: 'm2', source: 'web', content: 'Lives in SP.' }),
       ]),
       search: vi.fn(),
     };
@@ -79,7 +79,7 @@ describe('PromptRepository buildMemoryContext', () => {
     expect(systemContent).toContain('# Long-term Memory Context');
     expect(systemContent).toContain('### channel: whatsapp');
     expect(systemContent).toContain('- User likes coffee.');
-    expect(systemContent).toContain('### channel: telegram');
+    expect(systemContent).toContain('### channel: web');
     expect(systemContent).toContain('- Lives in SP.');
   });
 
@@ -539,11 +539,11 @@ describe('PromptRepository sticker rules', () => {
 
     const { messages } = await repository.build({
       userMessage: 'Hello',
-      channel: 'telegram',
+      channel: 'whatsapp',
     });
 
     expect(messages[0].content).not.toContain('# Learned Stickers');
-    expect(getRecent).toHaveBeenCalledWith(20, 'telegram');
+    expect(getRecent).toHaveBeenCalledWith(20, 'whatsapp');
   });
 });
 
@@ -603,7 +603,7 @@ describe('PromptRepository prompt sanitizer', () => {
   });
 });
 
-describe('PromptRepository includeMemory gating (delegated/errand sessions)', () => {
+describe('PromptRepository includeMemory gating (untrusted peers)', () => {
   const originalEmbeddingEnabled = config.AI.EMBED.ENABLED;
 
   beforeEach(() => {
@@ -627,8 +627,8 @@ describe('PromptRepository includeMemory gating (delegated/errand sessions)', ()
     expect(messages[0].content).toContain('# Long-term Memory Context');
   });
 
-  // A delegated (errand) session talks to an untrusted third party — they must
-  // never be able to probe the principal's personal facts via long-term memory.
+  // An untrusted peer must never be able to probe the principal's personal
+  // facts via long-term memory.
   it('omits the memory block entirely when includeMemory is false, without even querying the repository', async () => {
     const memoryRepository = {
       getAll: vi.fn().mockReturnValue([makeMemory({ id: 'm1', content: 'User likes coffee.' })]),

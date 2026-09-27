@@ -39,9 +39,6 @@ jobs:
       - name: Build server & web client
         run: pnpm build
 
-      - name: Build desktop shell
-        run: pnpm build:desktop
-
       - name: Run tests with coverage
         run: pnpm run test:coverage --reporter=verbose
 

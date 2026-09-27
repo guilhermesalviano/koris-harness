@@ -88,15 +88,7 @@ export default function SessionsPage() {
                     <td className="px-4 py-3 font-mono text-caption text-txt-2">{s.id.slice(0, 12)}…</td>
                     <td className="px-4 py-3 text-body text-txt">{s.channel}</td>
                     <td className="px-4 py-3 font-mono text-caption text-txt-2">{s.peerId}</td>
-                    <td className="px-4 py-3 text-body">
-                      {s.kind === 'delegated' ? (
-                        <span title="Child delegated session for an errand">
-                          <Badge tone="accent">errand child</Badge>
-                        </span>
-                      ) : (
-                        <span className="text-txt-3">user</span>
-                      )}
-                    </td>
+                    <td className="px-4 py-3 text-body text-txt-3">{s.kind}</td>
                     <td className="px-4 py-3 font-mono text-caption text-txt-2">{formatDate(s.startedAt)}</td>
                     <td className="px-4 py-3 font-mono text-caption text-txt-2">
                       {s.endedAt ? formatDate(s.endedAt) : <Badge tone="success" dot>open</Badge>}

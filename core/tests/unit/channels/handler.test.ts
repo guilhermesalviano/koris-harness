@@ -80,20 +80,7 @@ describe('channels/handler', () => {
     expect(gateway.handle).toHaveBeenCalledWith(
       { text: '[Context] Chat: direct (untrusted sender). Sender: guilherme. Message: hi', images: undefined, stickers: undefined },
       'jid',
-      { channel: 'test-channel', toolsEnabled: false, learnedSkillsEnabled: false, isTrustedSender: false },
-    );
-  });
-
-  it('forwards the sender\'s other channel addresses to the gateway', async () => {
-    const { handler, gateway } = makeHandler();
-    gateway.handle.mockResolvedValue('pong');
-
-    await handler.handle('141789856067723@lid', message({ peerAliases: ['555@s.whatsapp.net'] }));
-
-    expect(gateway.handle).toHaveBeenCalledWith(
-      expect.any(Object),
-      '141789856067723@lid',
-      expect.objectContaining({ peerAliases: ['555@s.whatsapp.net'] }),
+      { channel: 'test-channel', toolsEnabled: false, learnedSkillsEnabled: false },
     );
   });
 
@@ -238,7 +225,7 @@ describe('channels/handler', () => {
     expect(gateway.handle).toHaveBeenCalledWith(
       expect.anything(),
       'jid',
-      { channel: 'test-channel', toolsEnabled: true, learnedSkillsEnabled: true, isTrustedSender: true },
+      { channel: 'test-channel', toolsEnabled: true, learnedSkillsEnabled: true },
     );
   });
 
@@ -251,7 +238,7 @@ describe('channels/handler', () => {
     expect(gateway.handle).toHaveBeenCalledWith(
       expect.anything(),
       'jid',
-      { channel: 'test-channel', toolsEnabled: false, learnedSkillsEnabled: false, isTrustedSender: false },
+      { channel: 'test-channel', toolsEnabled: false, learnedSkillsEnabled: false },
     );
   });
 

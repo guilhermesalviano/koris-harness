@@ -7,7 +7,6 @@ const {
   auditRepo,
   sessionRepo,
   sessionManager,
-  errandRepo,
   messageRepo,
   memoryRepo,
   heartbeatRepo,
@@ -50,10 +49,6 @@ const {
     invalidate: vi.fn(),
     invalidateKey: vi.fn(),
   },
-  errandRepo: {
-    countByState: vi.fn(() => 0),
-    findTargets: vi.fn(() => []),
-  },
   messageRepo: { count: vi.fn(), getBySessionId: vi.fn(() => []), getPreviewBySessionId: vi.fn(() => null) },
   memoryRepo: { count: vi.fn(), getBySessionId: vi.fn(() => []) },
   beatRunRepo: { findRecent: vi.fn(() => []) },
@@ -84,12 +79,8 @@ const {
   },
   liveChannelRuntime: {
     startChannelLive: vi.fn(),
-    liveChannelNames: vi.fn(() => ['telegram', 'whatsapp']),
-    loadChannelConfig: vi.fn((name: string) =>
-      name === 'telegram'
-        ? { token: '', whitelist: '', allowUnlistedSenders: false }
-        : { authFolder: '', whitelist: '', allowUnlistedSenders: false },
-    ),
+    liveChannelNames: vi.fn(() => ['whatsapp']),
+    loadChannelConfig: vi.fn(() => ({ authFolder: '', whitelist: '', allowUnlistedSenders: false })),
     writeChannelConfigPatch: vi.fn(),
     reprimeChannelRuntime: vi.fn(),
     reprimeLiveChannelDescriptors: vi.fn(),
@@ -111,10 +102,6 @@ vi.mock('../../../src/repositories/audit-log', () => ({
 
 vi.mock('../../../src/repositories/session', () => ({
   SessionRepositoryFactory: { create: () => sessionRepo },
-}));
-
-vi.mock('../../../src/repositories/errand', () => ({
-  ErrandRepositoryFactory: { create: () => errandRepo },
 }));
 
 vi.mock('../../../src/repositories/message', () => ({
@@ -433,7 +420,7 @@ describe('AdminRouterFactory /overview', () => {
     skillsRepo.get.mockReturnValue([{}, {}, {}] as never);
     outboundRepo.count.mockReturnValue(11);
     channelRepo.getAll.mockReturnValue([
-      { channel: 'telegram', target: '@me', isPrincipal: true },
+      { channel: 'whatsapp', target: '@me', isPrincipal: true },
     ] as never);
     auditRepo.count.mockReturnValue(2);
     auditRepo.findAll.mockReturnValue([
@@ -482,11 +469,10 @@ describe('AdminRouterFactory /overview', () => {
     expect(body.aiSubagentsParallel).toBeTypeOf('boolean');
 
     expect(body.channels).toEqual([
-      { type: 'telegram', enabled: expect.any(Boolean) },
       { type: 'whatsapp', enabled: expect.any(Boolean) },
     ]);
     expect(body.registeredChannels).toEqual([
-      { type: 'telegram', target: '@me', principal: true },
+      { type: 'whatsapp', target: '@me', principal: true },
     ]);
 
     expect(body.health.status).toBe('ok');
@@ -956,7 +942,7 @@ describe('AdminRouterFactory /settings', () => {
 
     expect(res.json).toHaveBeenCalledWith({
       providers: expect.arrayContaining(['ollama', 'nvidia']),
-      channels: expect.arrayContaining(['telegram', 'whatsapp']),
+      channels: expect.arrayContaining(['whatsapp']),
     });
     const body = res.json.mock.calls[0][0];
     expect(body.providers).not.toContain('mock');
@@ -1143,20 +1129,6 @@ describe('AdminRouterFactory /settings', () => {
     expect(res.status).toHaveBeenCalledWith(400);
     const body = res.json.mock.calls[0][0];
     expect(body.details).toEqual(expect.arrayContaining([expect.stringContaining('reserved for internal testing')]));
-    expect(settingsWriter.writeSettingsFile).not.toHaveBeenCalled();
-  });
-
-  it('POST /settings rejects blanking the Telegram bot token while Telegram is enabled', () => {
-    pluginSettingsRepo.getEnabled.mockImplementation((family: string, name: string) => family === 'channels' && name === 'telegram');
-    const router = AdminRouterFactory.create(logger, {} as never, {} as never, sessionManager as never);
-    const res = makeResponse();
-    const req = makeRequest('POST', '/settings');
-    req.body = { channels: { telegram: { bot_token: '' } } };
-    callRoute(router, req, res);
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    const body = res.json.mock.calls[0][0];
-    expect(body.details).toEqual(expect.arrayContaining([expect.stringContaining('channels.telegram.bot_token')]));
     expect(settingsWriter.writeSettingsFile).not.toHaveBeenCalled();
   });
 
@@ -1477,7 +1449,7 @@ describe('AdminRouterFactory /agents', () => {
     callRoute(router, makeRequest('GET', '/agents'), res);
 
     const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(body.items.map((a: { id: string }) => a.id)).toEqual(['orchestrator', 'negotiator', 'watcher']);
+    expect(body.items.map((a: { id: string }) => a.id)).toEqual(['orchestrator', 'watcher']);
     expect(body.items.filter((a: { parentId: string | null }) => a.parentId === null)).toHaveLength(1);
     expect(body.items.filter((a: { messageable: boolean }) => a.messageable).map((a: { id: string }) => a.id)).toEqual([
       'orchestrator',
@@ -1498,7 +1470,7 @@ describe('AdminRouterFactory /sessions', () => {
         id: 's1',
         channel: 'whatsapp',
         peerId: '5551234',
-        kind: 'delegated',
+        kind: 'user',
         startedAt: '2026-01-01T00:00:00.000Z',
         endedAt: undefined,
         messageCount: 3,
@@ -1512,7 +1484,7 @@ describe('AdminRouterFactory /sessions', () => {
 
     expect(sessionRepo.findAll).toHaveBeenCalledWith(20, 0, undefined);
     const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(body.items[0]).toMatchObject({ id: 's1', channel: 'whatsapp', peerId: '5551234', kind: 'delegated' });
+    expect(body.items[0]).toMatchObject({ id: 's1', channel: 'whatsapp', peerId: '5551234', kind: 'user' });
     expect(body.items[0]).not.toHaveProperty('entryChannel');
   });
 
@@ -1560,79 +1532,6 @@ describe('AdminRouterFactory /sessions', () => {
     expect(res.status).toHaveBeenCalledWith(404);
     expect(sessionRepo.deleteById).not.toHaveBeenCalled();
     expect(sessionManager.invalidate).not.toHaveBeenCalled();
-  });
-});
-
-describe('AdminRouterFactory /errands', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    channelsManager.getExistingInstance.mockReturnValue(undefined);
-  });
-
-  // No channels manager is running in this test process (channelsManager.getExistingInstance
-  // defaults to undefined), so every errand route must degrade to 503 rather than throw.
-  it('GET /errands returns 503 when no channel manager is running', () => {
-    const router = AdminRouterFactory.create(logger, {} as never, {} as never, sessionManager as never);
-    const res = makeResponse();
-    callRoute(router, makeRequest('GET', '/errands'), res);
-
-    expect(res.status).toHaveBeenCalledWith(503);
-  });
-
-  it('GET /errands/:id returns 503 when no channel manager is running', () => {
-    const router = AdminRouterFactory.create(logger, {} as never, {} as never, sessionManager as never);
-    const res = makeResponse();
-    callRoute(router, makeRequest('GET', '/errands/e1'), res);
-
-    expect(res.status).toHaveBeenCalledWith(503);
-  });
-
-  it('POST /errands/:id/approve returns 503 when no channel manager is running', () => {
-    const router = AdminRouterFactory.create(logger, {} as never, {} as never, sessionManager as never);
-    const res = makeResponse();
-    callRoute(router, makeRequest('POST', '/errands/e1/approve'), res);
-
-    expect(res.status).toHaveBeenCalledWith(503);
-  });
-
-  it('POST /errands/:id/reply returns 503 when no channel manager is running', async () => {
-    const router = AdminRouterFactory.create(logger, {} as never, {} as never, sessionManager as never);
-    const res = makeResponse();
-    await router.handle(makeRequest('POST', '/errands/e1/reply', { answer: 'yes' }), res, () => {});
-
-    expect(res.status).toHaveBeenCalledWith(503);
-  });
-
-  it('GET /errands/:id/transcript returns 503 when no channel manager is running', () => {
-    const router = AdminRouterFactory.create(logger, {} as never, {} as never, sessionManager as never);
-    const res = makeResponse();
-    callRoute(router, makeRequest('GET', '/errands/e1/transcript'), res);
-
-    expect(res.status).toHaveBeenCalledWith(503);
-  });
-
-  it('/overview folds every non-terminal errand state into openErrands', async () => {
-    errandRepo.countByState.mockImplementation((state: string) =>
-      ({ draft: 1, queued: 2, open: 0, awaiting_peer: 3, awaiting_principal: 1 } as Record<string, number>)[state] ?? 0,
-    );
-    sessionRepo.count.mockReturnValue(0);
-    sessionRepo.countOpen.mockReturnValue(0);
-    messageRepo.count.mockReturnValue(0);
-    memoryRepo.count.mockReturnValue(0);
-    learnedSkillsRepo.count.mockReturnValue(0);
-    skillsRepo.get.mockReturnValue([]);
-    outboundRepo.count.mockReturnValue(0);
-    auditRepo.count.mockReturnValue(0);
-    auditRepo.findAll.mockReturnValue([]);
-    auditRepo.usage.mockReturnValue([]);
-
-    const router = AdminRouterFactory.create(logger, {} as never, {} as never, sessionManager as never);
-    const res = makeResponse();
-    router.handle(makeRequest('GET', '/overview'), res, () => {});
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-
-    const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(body.openErrands).toBe(7);
   });
 });
 
@@ -1762,7 +1661,7 @@ describe('AdminRouterFactory heartbeats/channels/outbound reads', () => {
     // Channel manager not running
     channelsManager.getExistingInstance.mockReturnValue(undefined);
     req = makeRequest('POST', '/outbound');
-    req.body = { content: 'hello', channel: 'telegram', target: '123' };
+    req.body = { content: 'hello', channel: 'whatsapp', target: '123' };
     res = makeResponse();
     await callRoute(router, req, res);
     expect(res.status).toHaveBeenCalledWith(503);

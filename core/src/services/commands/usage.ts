@@ -33,9 +33,9 @@ export function computeUsageReport(args: string[]): UsageReport {
   return buildUsageReport(rows, days);
 }
 
-export function formatUsageReport(report: UsageReport, source: string): string {
+export function formatUsageReport(report: UsageReport, _source: string): string {
   const message = buildUsageText(report);
-  return source === 'telegram' ? message : message.replace(/\*/g, '');
+  return message.replace(/\*/g, '');
 }
 
 function buildUsageText(report: UsageReport): string {

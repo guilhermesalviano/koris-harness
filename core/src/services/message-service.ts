@@ -3,7 +3,6 @@ import { IDatabaseService } from "../infrastructure/db-sqlite";
 import { IMessageRepository, MessageRepositoryFactory } from "../repositories/message";
 import { MessageRole, ImageAttachment } from "../types/messages";
 import { ISessionService } from "./session-service";
-import { config } from "../config";
 import type { AgentId } from '../constants/agents';
 
 interface IMessageService {
@@ -39,11 +38,7 @@ class MessageService implements IMessageService {
   getHistory(): Message[] {
     this.session.ensureActiveSession();
     const session = this.session.getSession();
-    // Delegated (errand) sessions get a wider history window than the
-    // normal 15-message cap — the negotiator needs enough of the
-    // negotiation to stay coherent turn to turn.
-    const limit = session.kind === 'delegated' ? config.ERRANDS.HISTORY_LIMIT : undefined;
-    return this.messageRepository.getBySessionId(session.id, limit);
+    return this.messageRepository.getBySessionId(session.id);
   }
 
   getSessionId(): string {

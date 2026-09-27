@@ -28,10 +28,7 @@ class SessionService implements ISessionService {
     this.sessionRepository = sessionRepository;
     this.key = { channel: session.channel, peerId: session.peerId, kind: session.kind };
     this.persistOnConstruct = options.persistOnConstruct ?? true;
-    // Delegated (errand) sessions must not be silently rotated away by idle
-    // TTL — a conversation that goes quiet overnight would otherwise lose
-    // its thread. Explicit options.rotateOnExpire always wins.
-    this.rotateOnExpire = options.rotateOnExpire ?? session.kind !== 'delegated';
+    this.rotateOnExpire = options.rotateOnExpire ?? true;
 
     if (this.persistOnConstruct) {
       this.sessionRepository.save(session);

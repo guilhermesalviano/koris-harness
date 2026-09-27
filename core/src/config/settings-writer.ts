@@ -17,9 +17,8 @@ export interface SettingsWriterOptions {
 }
 
 /**
- * Locates the app package root (the directory containing `src/`), so this
- * works both when run from the repo root and from a build under `dist/`.
- * Mirrors the anchor logic in src/onboard.ts's resolveOnboardingAppRoot.
+ * Locates the app package root (the directory containing `package.json`), so
+ * this works both when run from the repo root and from a build under `dist/`.
  */
 function resolveAppRoot(options?: SettingsWriterOptions): string {
   const cwd = options?.cwd ?? resolveDataDir();
@@ -27,12 +26,12 @@ function resolveAppRoot(options?: SettingsWriterOptions): string {
   const exists = options?.exists ?? existsSync;
 
   const appRoot = [
-    join(cwd, 'apps', 'client'),
     join(dirname, '..'),
     join(dirname, '..', '..'),
+    join(dirname, '..', '..', '..'),
     cwd,
   ].map((candidate) => normalize(candidate)).find((candidate) =>
-    exists(join(candidate, 'src', 'onboard.ts')) || exists(join(candidate, 'dist', 'src', 'onboard.js')),
+    exists(join(candidate, 'package.json')),
   );
 
   return appRoot ?? cwd;

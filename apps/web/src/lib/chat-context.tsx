@@ -91,8 +91,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const loadSessions = useCallback(async () => {
     try {
-      // kind=user: the sidebar is the principal's own chats, not delegated
-      // (errand) sessions running with other contacts.
+      // kind=user: the sidebar is the principal's own chats.
       const res = await apiRequest<SessionsResponse>('/sessions?limit=50&kind=user');
       setSessions(res.items);
     } catch {
@@ -250,7 +249,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Poll for background messages in the active session (e.g. errand escalations or notices).
+  // Poll for background messages in the active session.
   useEffect(() => {
     const poller = createHistoryPoller({
       getState: () => {

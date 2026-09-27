@@ -21,8 +21,8 @@ function formatName(slug: string): string {
 }
 
 /** Channels whose config has a matching slice in SettingsFormState and can be saved today. */
-type ConfigurableSlug = "telegram" | "whatsapp";
-const CONFIGURABLE_SLUGS: ConfigurableSlug[] = ["telegram", "whatsapp"];
+type ConfigurableSlug = "whatsapp";
+const CONFIGURABLE_SLUGS: ConfigurableSlug[] = ["whatsapp"];
 
 /** Hint keys that a rendered config field already covers — dropped from the active-hint list. */
 const FIELD_HINT_KEYS = new Set(["uninstalled", "inactive", "allowUnlisted", "whitelist"]);
@@ -100,30 +100,6 @@ function ChannelConfigForm({
               )}
             </div>
           ))}
-        </div>
-      )}
-
-      {slug === "telegram" && (
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            disabled={api.testingTelegram || !api.form.telegram.bot_token}
-            onClick={() => api.testTelegramToken()}
-            className={`${buttonClass} w-full sm:w-auto`}
-          >
-            {api.testingTelegram ? "Testing…" : "Test token"}
-          </button>
-          {api.telegramTestResult && (
-            <span
-              className={`font-mono text-mini break-words min-w-0 ${
-                api.telegramTestResult.ok ? "text-success" : "text-danger-2"
-              }`}
-            >
-              {api.telegramTestResult.ok
-                ? `valid — @${api.telegramTestResult.username ?? "?"}`
-                : (api.telegramTestResult.error ?? "invalid token")}
-            </span>
-          )}
         </div>
       )}
 
@@ -257,7 +233,7 @@ export function ChannelsStep({
       <div className="text-center sm:text-left">
         <p className="text-sm font-medium">{autoSave ? "Messaging channels" : "Chat channels (optional)"}</p>
         <p className="mt-1 font-mono text-mini text-txt-3">
-          {autoSave ? "Connect your messaging apps and manage who can reach your assistant." : "Download and activate chat channels to communicate with your agent via messaging apps, or click Next to proceed with Web & TUI only."}
+          {autoSave ? "Connect your messaging apps and manage who can reach your assistant." : "Download and activate chat channels to communicate with your agent via messaging apps, or click Next to proceed with Web only."}
         </p>
       </div>
 

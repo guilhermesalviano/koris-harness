@@ -1,5 +1,3 @@
-import readline from 'readline';
-
 export interface CommandContext {
   source: string;
   /** Whether the sender is trusted (tools enabled). Gates config-mutating commands. */
@@ -12,13 +10,12 @@ export interface CommandContext {
   learnedSkillsEnabled?: boolean;
   /** Stable id of the conversation origin (chat/user), surfaced by `/whoami`. */
   originId?: string;
-  /** The current turn's session row id, needed by `/errand` to record the errand's origin. */
+  /** The current turn's session row id, surfaced to commands that need the session. */
   sessionId?: string;
   session?: {
     messageCount: number;
     startTime: Date;
   };
-  rl?: readline.Interface;
 }
 
 export interface CommandResult {

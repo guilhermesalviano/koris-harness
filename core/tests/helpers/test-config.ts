@@ -7,9 +7,6 @@ export interface TestConfigPatch {
   audioSttEnabled?: boolean;
   audioTtsEnabled?: boolean;
   sessionTtlMs?: number;
-  errandsHardExpiryMs?: number;
-  errandsHistoryLimit?: number;
-  errandsMaxConcurrent?: number;
 }
 
 const DEFAULTS: Required<TestConfigPatch> = {
@@ -21,9 +18,6 @@ const DEFAULTS: Required<TestConfigPatch> = {
   // Pinned rather than left at the real 3h default: expiry tests must not
   // silently depend on production config.
   sessionTtlMs: 3 * 60 * 60 * 1000,
-  errandsHardExpiryMs: 7 * 24 * 60 * 60 * 1000,
-  errandsHistoryLimit: 100,
-  errandsMaxConcurrent: 10,
 };
 
 export function applyTestConfigDefaults(patch: TestConfigPatch = {}): void {
@@ -65,16 +59,6 @@ export function applyTestConfigDefaults(patch: TestConfigPatch = {}): void {
 
   Object.defineProperty(config.SESSION, 'TTL_MS', {
     value: values.sessionTtlMs,
-    configurable: true,
-    writable: true,
-  });
-
-  Object.defineProperty(config, 'ERRANDS', {
-    value: {
-      HARD_EXPIRY_MS: values.errandsHardExpiryMs,
-      HISTORY_LIMIT: values.errandsHistoryLimit,
-      MAX_CONCURRENT: values.errandsMaxConcurrent,
-    },
     configurable: true,
     writable: true,
   });

@@ -55,11 +55,12 @@ describe('services/commands/usage', () => {
       expect(result.response).not.toContain('*');
     });
 
-    it('preserves markdown asterisks for telegram source', () => {
-      const result = handleUsageCommand('/usage today', { source: 'telegram', trusted: true });
+    it('strips markdown asterisks for every source', () => {
+      const result = handleUsageCommand('/usage today', { source: 'whatsapp', trusted: true });
       expect(result.handled).toBe(true);
-      expect(result.response).toContain('*Token Usage* (today)');
-      expect(result.response).toContain('*Totals*');
+      expect(result.response).toContain('Token Usage (today)');
+      expect(result.response).toContain('Totals');
+      expect(result.response).not.toContain('*');
     });
 
     it('formats breakdown for agents, channels, and tools with durations and singular/plural', () => {
@@ -111,8 +112,8 @@ describe('services/commands/usage', () => {
         }
       );
 
-      const result = handleUsageCommand('/usage 3', { source: 'telegram', trusted: true });
-      expect(result.response).toContain('*Token Usage* (last 3 days)');
+      const result = handleUsageCommand('/usage 3', { source: 'whatsapp', trusted: true });
+      expect(result.response).toContain('Token Usage (last 3 days)');
       expect(result.response).toContain('main:');
       expect(result.response).toContain('search:');
       expect(result.response).toContain('web:');

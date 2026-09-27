@@ -7,7 +7,7 @@ import { hasSpecificHour, isEveryMinute, isOneTimeCron, isValidCronExpression } 
 export const TOOL_NAME = 'update_beat' as const;
 
 const BEAT_TYPES = ['reminder', 'scheduled_beat'] as const;
-const CHANNEL_TYPES = ['telegram', 'whatsapp'] as const;
+const CHANNEL_TYPES = ['whatsapp'] as const;
 
 function normalizeOptional(args: Record<string, unknown>, key: string): string | null | undefined {
   const value = getOptionalStringArg(args, key);
@@ -159,7 +159,7 @@ export function create(context: ToolPluginContext): Plugin {
           },
           target: {
             type: 'string',
-            description: 'New recipient address (Telegram chat id or WhatsApp JID) for the beat (optional). Must be provided together with channel.',
+            description: 'New recipient address (WhatsApp JID) for the beat (optional). Must be provided together with channel.',
           },
         },
         handler: (logger, args) => updateBeat(logger, args, context.heartbeats),

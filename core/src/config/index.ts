@@ -78,14 +78,6 @@ export interface AppConfig {
      */
     COMPACT_THRESHOLD: number;
   };
-  ERRANDS: {
-    /** An in-flight errand with no progress this long is lazily flipped to `expired` on next read. */
-    HARD_EXPIRY_MS: number;
-    /** History window given to the negotiator for a delegated session, replacing the normal 15-message cap. */
-    HISTORY_LIMIT: number;
-    /** Cap on simultaneously non-terminal errands, across all origins. */
-    MAX_CONCURRENT: number;
-  };
   HEARTBEAT: boolean;
   AI: {
     PARALLEL: boolean;
@@ -170,17 +162,6 @@ function buildConfig(): AppConfig {
     COMPACT_THRESHOLD: (() => {
       const raw = Number(get('session.compact_threshold', '0.9'));
       return Number.isFinite(raw) ? Math.min(1, Math.max(0.1, raw)) : 0.9;
-    })(),
-  },
-  ERRANDS: {
-    HARD_EXPIRY_MS: Number(get('errands.hard_expiry_ms', String(7 * 24 * 60 * 60 * 1000))),
-    HISTORY_LIMIT: (() => {
-      const raw = Number(get('errands.history_limit', '100'));
-      return Number.isInteger(raw) && raw > 0 ? raw : 100;
-    })(),
-    MAX_CONCURRENT: (() => {
-      const raw = Number(get('errands.max_concurrent', '10'));
-      return Number.isInteger(raw) && raw > 0 ? raw : 10;
     })(),
   },
   HEARTBEAT: get('heartbeat', 'true') === 'true',

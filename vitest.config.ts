@@ -6,19 +6,15 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./core/tests/setup/vitest.setup.ts'],
-    // build-resources/** and dist-desktop-out/** hold the staged server tree
-    // (pnpm desktop:stage / desktop:package) — deps like Next ship their own
-    // *.test.js which vitest would otherwise try to run.
+    // plugins/tools subdirectories are hub-owned (see .gitignore); only the
+    // top-level core-owned tool test files run.
     exclude: [
       '.stryker-tmp/**',
       '**/node_modules/**',
       'koris-hub/**',
       'artifacts/**',
-      'build-resources/**',
-      'dist-desktop-out/**',
       'plugins/channels/*/**',
-      // plugins/tools/errands is core-owned and tracked (see .gitignore), so its tests run.
-      'plugins/tools/!(errands|*.ts)/**',
+      'plugins/tools/*/**',
     ],
     coverage: {
       provider: 'v8',
@@ -39,7 +35,7 @@ export default defineConfig({
         // keep them out of coverage too, or their bundled size swamps the
         // global thresholds.
         'plugins/channels/*/**',
-        'plugins/tools/!(errands|*.ts)/**',
+        'plugins/tools/*/**',
       ],
     },
     onConsoleLog(log: string, type: 'stdout' | 'stderr'): boolean | void {
