@@ -1,10 +1,4 @@
-/**
- * Shared cron-expression validation, used by both `set-beat` and
- * `update-beat`. Pure/dependency-free — a copy of the subset of
- * `core/src/utils/heartbeat.ts` those two plugins actually need (the runner's
- * scheduling logic — `matchesCron`, `isCronDue`, `nextCronFire` — stays in
- * core, since it's not a tool concern).
- */
+/** Shared dependency-free cron validation for the runtime and heartbeat tools. */
 
 const CRON_REGEX = /^(\*|[0-9,\-*/]+)\s+(\*|[0-9,\-*/]+)\s+(\*|[0-9,\-*/]+)\s+(\*|[0-9,\-*/]+)\s+(\*|[0-9,\-*/]+)$/;
 

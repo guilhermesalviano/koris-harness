@@ -66,5 +66,15 @@ included.
 - `plugins/`: extension contracts and installed plugins.
 - `scripts/`: plugin scaffolding, hub sync, and optional audio/search sidecars.
 
+Admin route modules in `core/src/dashboard/routes/` receive their repository and
+runtime dependencies from `AdminRouterFactory`. Each module declares only the
+methods it uses. Completion and embedding consumers likewise depend on separate
+provider capabilities. Plugin sync services compose the shared directory watcher
+and module loader, keeping family-specific registration in each service.
+
+The audio modal renders recognition state from `useAudioRecognition`. Browser
+capture resources, visualization, and pure parsing helpers live in separate
+modules beside the component.
+
 Speech recognition, speech synthesis, and search sidecars are optional. Their
 setup and run scripts live under `scripts/audio/` and `scripts/search/`.

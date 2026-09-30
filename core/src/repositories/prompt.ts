@@ -1,5 +1,5 @@
 import { IContextRepository, ContextRepositoryFactory } from './context';
-import type { AIChatRequest, AIToolDefinition, AIProvider } from '../types/chat';
+import type { AIChatRequest, AIToolDefinition, AIEmbeddingProvider } from '../types/chat';
 import { IToolsRepository, ToolsRepositoryFactory } from './tools';
 import { Message, ImageAttachment } from '../types/messages';
 import { Memory } from '../entities/memory';
@@ -63,12 +63,12 @@ interface IPromptRepository {
  */
 class PromptRepository implements IPromptRepository {
   constructor(
-    private contextRepository: IContextRepository,
-    private toolsRepository: IToolsRepository,
-    private learnedSkillsRepository: ILearnedSkillsRepository,
-    private stickerRulesRepository: IStickerRulesRepository,
-    private memoryRepository: IMemoryRepository,
-    private embedProvider: AIProvider,
+    private contextRepository: Pick<IContextRepository, 'get'>,
+    private toolsRepository: Pick<IToolsRepository, 'getAll'>,
+    private learnedSkillsRepository: Pick<ILearnedSkillsRepository, 'getRecent'>,
+    private stickerRulesRepository: Pick<IStickerRulesRepository, 'getRecent'>,
+    private memoryRepository: Pick<IMemoryRepository, 'search' | 'getAll'>,
+    private embedProvider: AIEmbeddingProvider,
     private logger: ILogger,
   ) {}
 
@@ -283,7 +283,7 @@ class PromptRepository implements IPromptRepository {
 }
 
 class PromptRepositoryFactory {
-  static create(db: IDatabaseService, logger: ILogger, embedProvider: AIProvider): PromptRepository {
+  static create(db: IDatabaseService, logger: ILogger, embedProvider: AIEmbeddingProvider): PromptRepository {
     const contextRepository = ContextRepositoryFactory.create();
     const toolsRepository = ToolsRepositoryFactory.create();
     const learnedSkillsRepository = LearnedSkillsRepositoryFactory.create(db);

@@ -1763,6 +1763,21 @@ describe('AdminRouterFactory heartbeats/channels/outbound reads', () => {
     expect(heartbeatRepo.save).toHaveBeenCalledWith(expect.objectContaining({ runOnce: true }));
   });
 
+  it.each([{ cronExpression: 123 }, { cronExpression: null }, { cronExpression: {} }])(
+    'PATCH /heartbeats rejects non-string cron expressions: $cronExpression', (body) => {
+      const router = AdminRouterFactory.create(logger, {} as never, {} as never, sessionManager as never);
+      heartbeatRepo.getById.mockReturnValueOnce({ id: 'b1' });
+      const req = makeRequest('PATCH', '/heartbeats/b1');
+      req.params = { id: 'b1' };
+      req.body = body;
+      const res = makeResponse();
+      callRoute(router, req, res);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Invalid cron_expression.' });
+      expect(heartbeatRepo.update).not.toHaveBeenCalled();
+    },
+  );
+
   it('PATCH and DELETE /heartbeats/:id handle not-found and valid updates', () => {
     const router = AdminRouterFactory.create(logger, {} as never, {} as never, sessionManager as never);
 

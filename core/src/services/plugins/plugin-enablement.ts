@@ -21,7 +21,7 @@ export function defaultPluginEnabled(family: PluginFamily, name: string): boolea
 }
 
 export function resolvePluginEnabled(
-  repo: IPluginSettingsRepository,
+  repo: Pick<IPluginSettingsRepository, 'getEnabled'>,
   family: PluginFamily,
   name: string,
 ): boolean {
@@ -39,7 +39,7 @@ export function resolvePluginEnabled(
  * up the code default via `resolvePluginEnabled`.
  */
 export function migrateLegacyPluginEnabledFlags(
-  repo: IPluginSettingsRepository,
+  repo: Pick<IPluginSettingsRepository, 'getEnabled' | 'setEnabled'>,
   identities: PluginIdentity[],
   logger: ILogger,
 ): void {

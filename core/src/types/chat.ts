@@ -59,13 +59,22 @@ export interface ProviderHealth {
   detail?: string;
 }
 
-export interface AIProvider {
+export interface AICompletionProvider {
   readonly name: string;
   complete(request: AIChatRequest, options?: AIChatOptions): Promise<AIResponse>;
+}
+
+export interface AIEmbeddingProvider {
+  embed(text: string): Promise<number[]>;
+}
+
+export interface AIHealthProvider {
+  healthCheck(): Promise<ProviderHealth>;
+}
+
+export interface AIProvider extends AICompletionProvider, AIEmbeddingProvider, AIHealthProvider {
   chat(request: AIChatRequest, options?: AIChatOptions): Promise<string>;
   chatStream(request: AIChatRequest, options?: AIChatOptions): AsyncGenerator<string>;
-  embed(text: string): Promise<number[]>;
-  healthCheck(): Promise<ProviderHealth>;
 }
 
 export interface IChatService {

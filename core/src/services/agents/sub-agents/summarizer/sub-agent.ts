@@ -15,6 +15,7 @@ import { IAuditService, AuditServiceFactory } from "../../../audit/audit-service
 import { generateId } from "../../../../utils/generate-id";
 import type { Message } from "../../../../types/messages";
 import type { Message as MessageEntity } from "../../../../entities/message";
+import type { AIEmbeddingProvider } from "../../../../types/chat";
 import type { MemoryType } from "../../../../types/memory";
 
 export interface SummarizerWorkerProps {
@@ -43,7 +44,8 @@ class Summarizer implements ISubAgent<SummarizerWorkerProps> {
   constructor(
     private readonly logger: ILogger,
     private readonly completionService: IAICompletionService,
-    private readonly auditService: IAuditService,
+    private readonly auditService: Pick<IAuditService, 'record'>,
+    private readonly resolveEmbeddingProvider: () => AIEmbeddingProvider,
   ) {
     this.queue = config.AI.SUBAGENTS_PARALLEL ? new TaskQueue(1) : sharedSubAgentQueue;
     subAgentQueuesRegistry.register('summarizer', this.queue);
@@ -80,25 +82,8 @@ class Summarizer implements ISubAgent<SummarizerWorkerProps> {
 
       const parsedMemory = parseSummarizerResponse(response.text);
       
-      let embedding: number[] | undefined;
-      if (config.AI.EMBED.ENABLED) {
-        try {
-          const provider = getAIProvider(this.logger, 'embed', { background: true });
-          embedding = await provider.embed(parsedMemory.content);
-        } catch (error) {
-          this.logger.error(
-            `embed failed for ${config.AI.EMBED.PROVIDER}/${config.AI.EMBED.MODEL}; memory saved WITHOUT an embedding and will not surface in semantic memory — check the embed provider/model is reachable`,
-            { error },
-          );
-        }
-      }
-
-      const memory = {
-        ...parsedMemory,
-        embedding,
-      };
-
-      props.memoryService.save(memory);
+      const embedding = await this.embedMemory(parsedMemory.content);
+      props.memoryService.save({ ...parsedMemory, embedding });
       this.logger.info(`Summarizer worker completed for session ${props.sessionId}`);
     } catch (error) {
       this.logger.error(`Failed to summarize for session ${props.sessionId}`, { error });
@@ -129,18 +114,7 @@ class Summarizer implements ISubAgent<SummarizerWorkerProps> {
 
       const parsedMemory = parseSummarizerResponse(response.text);
 
-      let embedding: number[] | undefined;
-      if (config.AI.EMBED.ENABLED) {
-        try {
-          const provider = getAIProvider(this.logger, 'embed', { background: true });
-          embedding = await provider.embed(parsedMemory.content);
-        } catch (error) {
-          this.logger.error(
-            `embed failed for ${config.AI.EMBED.PROVIDER}/${config.AI.EMBED.MODEL} while compacting; memory saved WITHOUT an embedding and will not surface in semantic memory — check the embed provider/model is reachable`,
-            { error },
-          );
-        }
-      }
+      const embedding = await this.embedMemory(parsedMemory.content, ' while compacting');
 
       props.memoryService.save({ ...parsedMemory, embedding });
       this.logger.info(`Compaction completed for session ${props.sessionId}`);
@@ -151,6 +125,19 @@ class Summarizer implements ISubAgent<SummarizerWorkerProps> {
       throw error;
     } finally {
       endFooterActivity();
+    }
+  }
+
+  private async embedMemory(content: string, context = ''): Promise<number[] | undefined> {
+    if (!config.AI.EMBED.ENABLED) return undefined;
+    try {
+      return await this.resolveEmbeddingProvider().embed(content);
+    } catch (error) {
+      this.logger.error(
+        `embed failed for ${config.AI.EMBED.PROVIDER}/${config.AI.EMBED.MODEL}${context}; memory saved WITHOUT an embedding and will not surface in semantic memory — check the embed provider/model is reachable`,
+        { error },
+      );
+      return undefined;
     }
   }
 
@@ -195,7 +182,10 @@ class Summarizer implements ISubAgent<SummarizerWorkerProps> {
 class SummarizerFactory {
   static create(logger: ILogger): Summarizer {
     const completionService = new AICompletionService(() => getAIProvider(logger, 'worker', { background: true }), logger, { role: 'worker', agentName: 'summarizer' });
-    return new Summarizer(logger, completionService, AuditServiceFactory.create(logger));
+    return new Summarizer(
+      logger, completionService, AuditServiceFactory.create(logger),
+      () => getAIProvider(logger, 'embed', { background: true }),
+    );
   }
 }
 

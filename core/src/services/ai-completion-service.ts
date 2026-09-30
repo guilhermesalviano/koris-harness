@@ -1,6 +1,6 @@
 import { config } from '../config';
 import type { ILogger } from '../infrastructure/logger';
-import type { AIChatOptions, AIChatRequest, AIProvider, AIResponse } from '../types/chat';
+import type { AIChatOptions, AIChatRequest, AICompletionProvider, AIResponse } from '../types/chat';
 import { AuditLogLlm, type AuditRole } from '../entities/audit-log';
 import { IAuditService, AuditServiceFactory } from './audit/audit-service';
 import { generateId } from '../utils/generate-id';
@@ -51,7 +51,7 @@ export interface IAICompletionService {
 
 /** Resolves the provider to use for a `complete()` call, invoked fresh each time
  * so a provider swapped in via the config UI takes effect without a restart. */
-export type AIProviderResolver = () => AIProvider;
+export type AIProviderResolver = () => AICompletionProvider;
 
 export interface AICompletionServiceOptions {
   role?: AuditRole;

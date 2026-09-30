@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Summarizer } from '../../../../../../src/services/agents/sub-agents/summarizer/sub-agent';
 import { SUMMARIZATION_INSTRUCTIONS, COMPACT_INSTRUCTIONS } from '../../../../../../src/constants';
 import type { ILogger } from '../../../../../../src/infrastructure/logger';
-import * as providerRegistry from '../../../../../../src/services/providers';
 import { config } from '../../../../../../src/config';
 import { sharedSubAgentQueue } from '../../../../../../src/services/agents/sub-agents/queue/task-queue';
+
+const embeddingProvider = { embed: vi.fn<() => Promise<number[]>>() };
+const resolveEmbeddingProvider = () => embeddingProvider;
 
 function makeLogger(): ILogger {
   return { info: vi.fn(), error: vi.fn(), debug: vi.fn(), warn: vi.fn() };
@@ -37,6 +39,7 @@ describe('Summarizer', () => {
   beforeEach(() => {
     (config.AI.EMBED as { ENABLED: boolean }).ENABLED = true;
     vi.clearAllMocks();
+    embeddingProvider.embed.mockReset().mockResolvedValue([0.1, 0.2]);
   });
 
   afterEach(() => {
@@ -44,9 +47,7 @@ describe('Summarizer', () => {
   });
 
   it('stores parsed memory type and content from AI JSON', async () => {
-    vi.spyOn(providerRegistry, 'getAIProvider').mockReturnValue({
-      embed: vi.fn().mockResolvedValue([0.1, 0.2]),
-    } as any);
+    embeddingProvider.embed.mockResolvedValue([0.1, 0.2]);
 
     const logger = makeLogger();
     const completionService = {
@@ -55,7 +56,7 @@ describe('Summarizer', () => {
         text: '{"type":"fact","content":"TS adds static typing."}',
       }),
     };
-    const summarizer = new Summarizer(logger, completionService as never, makeAuditService());
+    const summarizer = new Summarizer(logger, completionService as never, makeAuditService(), resolveEmbeddingProvider);
     const props = makeProps();
 
     await summarizer.handler(props);
@@ -74,20 +75,18 @@ describe('Summarizer', () => {
       content: 'TS adds static typing.',
       embedding: [0.1, 0.2],
     });
-    expect(providerRegistry.getAIProvider).toHaveBeenCalledWith(expect.anything(), 'embed', expect.objectContaining({ background: true }));
+    expect(embeddingProvider.embed).toHaveBeenCalledWith('TS adds static typing.');
     expect(logger.info).toHaveBeenCalledWith('Summarizer worker completed for session session-1');
   });
 
   it('defaults to summary when AI returns plain text', async () => {
-    vi.spyOn(providerRegistry, 'getAIProvider').mockReturnValue({
-      embed: vi.fn().mockResolvedValue([0.1, 0.2]),
-    } as any);
+    embeddingProvider.embed.mockResolvedValue([0.1, 0.2]);
 
     const logger = makeLogger();
     const completionService = {
       complete: vi.fn().mockResolvedValue({ kind: 'message', text: 'TS adds static typing.' }),
     };
-    const summarizer = new Summarizer(logger, completionService as never, makeAuditService());
+    const summarizer = new Summarizer(logger, completionService as never, makeAuditService(), resolveEmbeddingProvider);
     const props = makeProps();
 
     await summarizer.handler(props);
@@ -100,8 +99,7 @@ describe('Summarizer', () => {
   });
 
   it('skips embedding generation when embeddings are disabled', async () => {
-    const embed = vi.fn().mockResolvedValue([0.1, 0.2]);
-    vi.spyOn(providerRegistry, 'getAIProvider').mockReturnValue({ embed } as any);
+    const embed = embeddingProvider.embed;
     (config.AI.EMBED as { ENABLED: boolean }).ENABLED = false;
 
     const logger = makeLogger();
@@ -111,7 +109,7 @@ describe('Summarizer', () => {
         text: '{"type":"fact","content":"TS adds static typing."}',
       }),
     };
-    const summarizer = new Summarizer(logger, completionService as never, makeAuditService());
+    const summarizer = new Summarizer(logger, completionService as never, makeAuditService(), resolveEmbeddingProvider);
     const props = makeProps();
 
     await summarizer.handler(props);
@@ -125,6 +123,20 @@ describe('Summarizer', () => {
     expect(logger.info).toHaveBeenCalledWith('Summarizer worker completed for session session-1');
   });
 
+  it.each(['summary', 'compact'])('saves %s memory without embeddings when embedding fails', async (mode) => {
+    embeddingProvider.embed.mockRejectedValueOnce(new Error('embed offline'));
+    const logger = makeLogger();
+    const completionService = {
+      complete: vi.fn().mockResolvedValue({ kind: 'message', text: '{"type":"fact","content":"keep this"}' }),
+    };
+    const summarizer = new Summarizer(logger, completionService, makeAuditService(), resolveEmbeddingProvider);
+    const props = makeProps();
+    if (mode === 'summary') await summarizer.handler(props);
+    else await summarizer.compact({ ...props, messages: [] });
+    expect(props.memoryService.save).toHaveBeenCalledWith({ type: 'fact', content: 'keep this', embedding: undefined });
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('embed failed'), expect.any(Object));
+  });
+
   it('skips summarization without saving memory when the model returns tool calls', async () => {
     const logger = makeLogger();
     const completionService = {
@@ -133,7 +145,7 @@ describe('Summarizer', () => {
         calls: [{ name: 'noop', arguments: {} }],
       }),
     };
-    const summarizer = new Summarizer(logger, completionService as never, makeAuditService());
+    const summarizer = new Summarizer(logger, completionService as never, makeAuditService(), resolveEmbeddingProvider);
     const props = makeProps();
 
     await summarizer.handler(props);
@@ -146,13 +158,13 @@ describe('Summarizer', () => {
     expect(logger.error).not.toHaveBeenCalled();
   });
 
-it('logs an error when completion fails', async () => {
+  it('logs an error when completion fails', async () => {
     const logger = makeLogger();
     const auditService = makeAuditService();
     const completionService = {
       complete: vi.fn().mockRejectedValue(new Error('provider offline')),
     };
-    const summarizer = new Summarizer(logger, completionService as never, auditService);
+    const summarizer = new Summarizer(logger, completionService as never, auditService, resolveEmbeddingProvider);
     const props = makeProps();
 
     await summarizer.handler(props);
@@ -183,7 +195,7 @@ it('logs an error when completion fails', async () => {
         text: '{"type":"fact","content":"TS adds static typing."}',
       }),
     };
-    const summarizer = new Summarizer(logger, completionService as never, auditService);
+    const summarizer = new Summarizer(logger, completionService as never, auditService, resolveEmbeddingProvider);
     const props = makeProps({
       memoryService: { save: vi.fn().mockImplementation(() => { throw new Error('db full'); }) },
     });
@@ -210,7 +222,7 @@ it('logs an error when completion fails', async () => {
     const completionService = {
       complete: vi.fn().mockImplementation(gated),
     };
-    const summarizer = new Summarizer(logger, completionService as never, makeAuditService());
+    const summarizer = new Summarizer(logger, completionService as never, makeAuditService(), resolveEmbeddingProvider);
     const propsA = makeProps({ sessionId: 'session-a' });
     const propsB = makeProps({ sessionId: 'session-b' });
 
@@ -239,7 +251,7 @@ it('logs an error when completion fails', async () => {
   it('uses the shared sub-agent queue when subagents_parallel is false', async () => {
     (config.AI as { SUBAGENTS_PARALLEL: boolean }).SUBAGENTS_PARALLEL = false;
     const logger = makeLogger();
-    const summarizer = new Summarizer(logger, { complete: vi.fn() } as never, makeAuditService());
+    const summarizer = new Summarizer(logger, { complete: vi.fn() } as never, makeAuditService(), resolveEmbeddingProvider);
 
     expect((summarizer as unknown as { queue: unknown }).queue).toBe(sharedSubAgentQueue);
   });
@@ -247,7 +259,7 @@ it('logs an error when completion fails', async () => {
   it('uses its own queue when subagents_parallel is true', async () => {
     (config.AI as { SUBAGENTS_PARALLEL: boolean }).SUBAGENTS_PARALLEL = true;
     const logger = makeLogger();
-    const summarizer = new Summarizer(logger, { complete: vi.fn() } as never, makeAuditService());
+    const summarizer = new Summarizer(logger, { complete: vi.fn() } as never, makeAuditService(), resolveEmbeddingProvider);
 
     expect((summarizer as unknown as { queue: unknown }).queue).not.toBe(sharedSubAgentQueue);
   });
@@ -259,7 +271,7 @@ it('logs an error when completion fails', async () => {
 
     const release: Array<() => void> = [];
     const gated = () => new Promise<unknown>((resolve) => release.push(() => resolve({ kind: 'message', text: '{"type":"fact","content":"x"}' })));
-    const summarizer = new Summarizer(makeLogger(), { complete: vi.fn().mockImplementation(gated) } as never, makeAuditService());
+    const summarizer = new Summarizer(makeLogger(), { complete: vi.fn().mockImplementation(gated) } as never, makeAuditService(), resolveEmbeddingProvider);
 
     const first = summarizer.handler(makeProps({ sessionId: 'session-a' }));
     const second = summarizer.handler(makeProps({ sessionId: 'session-b' }));
@@ -299,9 +311,7 @@ it('logs an error when completion fails', async () => {
     }
 
     it('summarizes the full transcript and saves the parsed memory', async () => {
-      vi.spyOn(providerRegistry, 'getAIProvider').mockReturnValue({
-        embed: vi.fn().mockResolvedValue([0.3]),
-      } as any);
+      embeddingProvider.embed.mockResolvedValue([0.3]);
       (config.AI.EMBED as { ENABLED: boolean }).ENABLED = true;
 
       const logger = makeLogger();
@@ -311,7 +321,7 @@ it('logs an error when completion fails', async () => {
           text: '{"type":"summary","content":"Planned a trip together."}',
         }),
       };
-      const summarizer = new Summarizer(logger, completionService as never, makeAuditService());
+      const summarizer = new Summarizer(logger, completionService as never, makeAuditService(), resolveEmbeddingProvider);
       const props = makeCompactProps();
 
       const result = await summarizer.compact(props);
@@ -339,7 +349,7 @@ it('logs an error when completion fails', async () => {
       const completionService = {
         complete: vi.fn().mockRejectedValue(new Error('provider offline')),
       };
-      const summarizer = new Summarizer(logger, completionService as never, auditService);
+      const summarizer = new Summarizer(logger, completionService as never, auditService, resolveEmbeddingProvider);
       const props = makeCompactProps();
 
       await expect(summarizer.compact(props)).rejects.toThrow('provider offline');
@@ -360,7 +370,7 @@ it('logs an error when completion fails', async () => {
       const completionService = {
         complete: vi.fn().mockResolvedValue({ kind: 'tool_calls', calls: [] }),
       };
-      const summarizer = new Summarizer(logger, completionService as never, makeAuditService());
+      const summarizer = new Summarizer(logger, completionService as never, makeAuditService(), resolveEmbeddingProvider);
       const props = makeCompactProps();
 
       await expect(summarizer.compact(props)).rejects.toThrow();

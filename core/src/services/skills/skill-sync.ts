@@ -1,5 +1,4 @@
-import { watch, type FSWatcher } from 'fs';
-import { mkdirSync } from 'fs';
+import { watch, mkdirSync } from 'fs';
 import { join } from 'path';
 import { config } from '../../config';
 import { SKILL_LEARNING_PROMPT } from '../../constants';
@@ -8,8 +7,7 @@ import { ISkillsRepository } from '../../repositories/skills';
 import { ILearnedSkillsRepository } from '../../repositories/learned-skills';
 import { ILogger } from '../../infrastructure/logger';
 import type { Skill } from '../../types/skills';
-
-const DEBOUNCE_MS = 500;
+import { DirectoryWatcher } from '../plugins/directory-watcher';
 
 interface ISkillSyncService {
   sync(): void;
@@ -18,15 +16,23 @@ interface ISkillSyncService {
 }
 
 class SkillSyncService implements ISkillSyncService {
-  private watchers: FSWatcher[] = [];
-  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private watching = false;
+  private readonly watcher: DirectoryWatcher;
 
   constructor(
     private logger: ILogger,
-    private skillsRepo: ISkillsRepository,
-    private learnedSkillsRepo: ILearnedSkillsRepository,
-  ) {}
+    private skillsRepo: Pick<ISkillsRepository, 'get'>,
+    private learnedSkillsRepo: Pick<ILearnedSkillsRepository, 'save' | 'deleteNotIn'>,
+  ) {
+    this.watcher = new DirectoryWatcher({
+      root: () => join(config.BASE_DIR, 'plugins', 'skills'),
+      directories: () => skillsRepo.get().map((skill) => skill.name),
+      watch,
+      onChange: () => this.sync(),
+      onError: (error) => logger.warn('[skill-sync] Failed to watch skills directory', {
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    });
+  }
 
   sync(): void {
     const skills = this.skillsRepo.get();
@@ -42,9 +48,7 @@ class SkillSyncService implements ISkillSyncService {
 
     const removed = this.learnedSkillsRepo.deleteNotIn(skills.map(skill => skill.name));
 
-    if (this.watching) {
-      this.registerWatchers(join(config.BASE_DIR, 'plugins', 'skills'));
-    }
+    this.watcher.refresh();
 
     this.logger.info(`[skill-sync] Synced ${skills.length} skills from disk (${removed} removed)`);
   }
@@ -53,55 +57,13 @@ class SkillSyncService implements ISkillSyncService {
     const skillsPath = join(config.BASE_DIR, 'plugins', 'skills');
     mkdirSync(skillsPath, { recursive: true });
 
-    this.watching = true;
     this.sync();
+    this.watcher.start();
     this.logger.info('[skill-sync] Watching skills directory for changes');
   }
 
   stop(): void {
-    this.watching = false;
-
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
-    }
-
-    this.closeWatchers();
-  }
-
-  private registerWatchers(skillsPath: string): void {
-    this.closeWatchers();
-
-    try {
-      this.watchers.push(
-        watch(skillsPath, { persistent: true }, () => this.scheduleSync()),
-      );
-
-      const skills = this.skillsRepo.get();
-      for (const skill of skills) {
-        this.watchers.push(
-          watch(join(skillsPath, skill.name), { persistent: true }, () => this.scheduleSync()),
-        );
-      }
-    } catch (error) {
-      this.logger.warn('[skill-sync] Failed to watch skills directory', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  private scheduleSync(): void {
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-    }
-    this.debounceTimer = setTimeout(() => this.sync(), DEBOUNCE_MS);
-  }
-
-  private closeWatchers(): void {
-    for (const watcher of this.watchers) {
-      watcher.close();
-    }
-    this.watchers = [];
+    this.watcher.stop();
   }
 
   private buildLearningPrompt(skill: Skill): string {
