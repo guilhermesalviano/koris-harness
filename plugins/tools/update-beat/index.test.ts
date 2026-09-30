@@ -98,7 +98,7 @@ describe('updateBeat', () => {
   });
 
   it('returns error when only one of channel or target is provided', async () => {
-    const result = await updateBeat(logger, { id: 'hb-1', channel: 'telegram' }, gateway);
+    const result = await updateBeat(logger, { id: 'hb-1', channel: 'whatsapp' }, gateway);
     expect(result.success).toBe(false);
     expect(result.error).toContain('together');
   });

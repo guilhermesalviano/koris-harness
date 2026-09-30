@@ -4,6 +4,8 @@ import { config } from '../../../config';
 import { ILogger } from '../../../infrastructure/logger';
 import { THINK_START, THINK_END } from '../../../constants/thinking';
 import { extractToolCalls } from '../../../utils/tool-calls';
+import { readJsonStream } from '../../../utils/json-stream';
+import { createRequestScope } from '../request-scope';
 import type { ProviderRegistration } from '../manifest';
 import { OPENAI_COMPATIBLE_PRESETS, type OpenAICompatiblePreset } from './presets';
 
@@ -98,7 +100,7 @@ class OpenAICompatibleAIProvider implements AIProvider {
   }
 
   async chat(request: AIChatRequest, options?: AIChatOptions): Promise<string> {
-    const { controller, cleanup } = this.makeController(options?.signal);
+    const { controller, cleanup } = createRequestScope({ signal: options?.signal, hardTimeoutMs: config.AI.TIMEOUTS.HARD_MS });
     try {
       this.logger.debug(`${this.name} chat request`, {
         model: request.model ?? this.defaultModel,
@@ -143,13 +145,11 @@ class OpenAICompatibleAIProvider implements AIProvider {
   }
 
   async *chatStream(request: AIChatRequest, options?: AIChatOptions): AsyncGenerator<string> {
-    const { controller, cleanup } = this.makeController(options?.signal);
-
-    let idleTimer: NodeJS.Timeout | undefined;
-    const bumpIdle = () => {
-      clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => controller.abort(), config.AI.TIMEOUTS.IDLE_MS);
-    };
+    const { controller, cleanup, bumpIdle } = createRequestScope({
+      signal: options?.signal,
+      hardTimeoutMs: config.AI.TIMEOUTS.HARD_MS,
+      idleTimeoutMs: config.AI.TIMEOUTS.IDLE_MS,
+    });
 
     let totalChunksReceived = 0;
     let totalCharsYielded = 0;
@@ -178,7 +178,7 @@ class OpenAICompatibleAIProvider implements AIProvider {
       const textBuffer: string[] = [];
 
       bumpIdle();
-      for await (const chunk of this.readSSE(body, bumpIdle)) {
+      for await (const chunk of readJsonStream<OpenAIChatChunk>(body, bumpIdle)) {
         totalChunksReceived++;
         if (chunk.error) throw new Error(`${this.name} stream error: ${chunk.error.message}`);
 
@@ -285,7 +285,6 @@ class OpenAICompatibleAIProvider implements AIProvider {
       }
       throw err;
     } finally {
-      clearTimeout(idleTimer);
       cleanup();
     }
   }
@@ -318,18 +317,24 @@ class OpenAICompatibleAIProvider implements AIProvider {
       input_type: 'query'
     });
 
-    const res = await fetch(`${this.baseUrl}/embeddings`, {
-      method: 'POST',
-      headers: this.authHeaders(),
-      body
-    });
+    const { controller, cleanup } = createRequestScope({ hardTimeoutMs: config.AI.TIMEOUTS.HARD_MS });
+    try {
+      const res = await fetch(`${this.baseUrl}/embeddings`, {
+        method: 'POST',
+        headers: this.authHeaders(),
+        body,
+        signal: controller.signal,
+      });
 
-    if (!res.ok) {
-      throw new Error(`${this.name} /embeddings failed (${res.status})`);
+      if (!res.ok) {
+        throw new Error(`${this.name} /embeddings failed (${res.status})`);
+      }
+
+      const data = await res.json() as { data: Array<{ embedding: number[] }> };
+      return data.data[0].embedding;
+    } finally {
+      cleanup();
     }
-
-    const data = await res.json() as { data: Array<{ embedding: number[] }> };
-    return data.data[0].embedding;
   }
 
   private async chatFallback(request: AIChatRequest, signal: AbortSignal, options?: AIChatOptions): Promise<string> {
@@ -356,75 +361,6 @@ class OpenAICompatibleAIProvider implements AIProvider {
     const content = typeof msg?.content === 'string' ? msg.content : null;
     if (!content) throw new Error(`${this.name} response missing content`);
     return content;
-  }
-
-  private makeController(outerSignal?: AbortSignal): { controller: AbortController; cleanup: () => void } {
-    const controller = new AbortController();
-    const hardTimer = setTimeout(() => controller.abort(), config.AI.TIMEOUTS.HARD_MS);
-
-    if (!outerSignal) return { controller, cleanup: () => clearTimeout(hardTimer) };
-    if (outerSignal.aborted) {
-      controller.abort(outerSignal.reason);
-      return { controller, cleanup: () => clearTimeout(hardTimer) };
-    }
-
-    const onAbort = () => controller.abort(outerSignal.reason);
-    outerSignal.addEventListener('abort', onAbort, { once: true });
-    return {
-      controller,
-      cleanup: () => {
-        clearTimeout(hardTimer);
-        outerSignal.removeEventListener('abort', onAbort);
-      },
-    };
-  }
-
-  private async *readSSE(
-    body: ReadableStream<Uint8Array>,
-    onBump: () => void,
-  ): AsyncGenerator<OpenAIChatChunk> {
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    try {
-      while (true) {
-        const { value, done } = await reader.read();
-        const text = decoder.decode(value ?? new Uint8Array(), { stream: !done });
-        if (text) {
-          onBump();
-          buffer += text;
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-
-          for (const line of lines) {
-            const parsed = this.parseSSELine(line);
-            if (parsed) yield parsed;
-          }
-        }
-        if (done) break;
-      }
-
-      if (buffer.trim()) {
-        const parsed = this.parseSSELine(buffer);
-        if (parsed) yield parsed;
-      }
-    } finally {
-      reader.releaseLock();
-    }
-  }
-
-  private parseSSELine(line: string): OpenAIChatChunk | null {
-    const trimmed = line.trim();
-    if (!trimmed) return null;
-
-    const data = trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed;
-    if (!data || data === '[DONE]') return null;
-
-    try {
-      return JSON.parse(data) as OpenAIChatChunk;
-    } catch {
-      return null;
-    }
   }
 
   private authHeaders(): Record<string, string> {

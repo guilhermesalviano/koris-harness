@@ -45,6 +45,16 @@ describe('config/index reloadConfig', () => {
     expect(config.WEB_PORT).toBe(5555);
   });
 
+  it('keeps arbitrary personal information keys as data', () => {
+    const dir = createTempDir();
+    writeFileSync(join(dir, 'koris.json'), '{"personal_information":{"__proto__":"custom","name":"User","unused":null}}');
+    reloadConfig({ cwd: dir, dirname: dir });
+    expect(Object.getPrototypeOf(config.PERSONAL_INFORMATION)).toBe(Object.prototype);
+    expect(Object.prototype.hasOwnProperty.call(config.PERSONAL_INFORMATION, '__proto__')).toBe(true);
+    expect(config.PERSONAL_INFORMATION.name).toBe('User');
+    expect(config.PERSONAL_INFORMATION.unused).toBeUndefined();
+  });
+
   it('picks up nested AI values after a reload', () => {
     const dir = createTempDir();
     writeFileSync(join(dir, 'koris.json'), JSON.stringify({
@@ -237,4 +247,3 @@ describe('config/index audio', () => {
     }
   });
 });
-

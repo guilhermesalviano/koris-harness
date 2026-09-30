@@ -9,6 +9,7 @@ vi.mock('../../../src/services/providers', () => ({
 }));
 
 import { healthCheck } from '../../../src/services/provider-health-service';
+import { getAIProvider } from '../../../src/services/providers';
 import type { ILogger } from '../../../src/infrastructure/logger';
 
 const logger: ILogger = {
@@ -25,6 +26,17 @@ describe('healthCheck', () => {
     mockProviderHealthCheck.mockResolvedValue({ ok: true, detail: 'v0.5.0' });
     const result = await healthCheck(logger);
     expect(result.status).toBe('ok');
+    expect(result.details).toBe('v0.5.0');
+  });
+
+  it('reports invalid provider configuration as an unhealthy result', async () => {
+    vi.mocked(getAIProvider).mockImplementationOnce(() => { throw new Error('Invalid provider URL'); });
+    expect(await healthCheck(logger)).toMatchObject({ status: 'error', details: 'Invalid provider URL' });
+  });
+
+  it('preserves provider diagnostics when a health check fails', async () => {
+    mockProviderHealthCheck.mockResolvedValue({ ok: false, detail: 'HTTP 503' });
+    expect(await healthCheck(logger)).toMatchObject({ status: 'error', details: 'HTTP 503' });
   });
 
   it('returns a valid ISO timestamp', async () => {

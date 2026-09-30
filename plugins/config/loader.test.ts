@@ -37,6 +37,15 @@ describe('resolvePluginDir', () => {
     expect(dir).toBe(normalize(join('/data', 'plugins', 'channels', 'whatsapp')));
   });
 
+  it('keeps config in the writable data dir when a bundled config exists', () => {
+    expect(resolvePluginDir('whatsapp', {
+      cwd,
+      dataDir: '/data',
+      fallbackDir,
+      exists: (p) => p === normalize(join(cwd, 'plugins', 'channels', 'whatsapp', 'config.yml')),
+    })).toBe(normalize(join('/data', 'plugins', 'channels', 'whatsapp')));
+  });
+
   it('with no config anywhere and no dataDir, writes into the repo plugins tree, NOT dist/', () => {
     // Only the repo `plugins/channels` directory exists (no config.yml yet).
     const repoFamilyDir = normalize(join(cwd, 'plugins', 'channels'));
@@ -141,4 +150,3 @@ describe('getPluginConfigValue', () => {
     expect(getPluginConfigValue('key', 'fallback', yamlConfig, 'TEST_KEY', env)).toBe('');
   });
 });
-

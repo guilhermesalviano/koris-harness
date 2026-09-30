@@ -6,15 +6,14 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./core/tests/setup/vitest.setup.ts'],
-    // plugins/tools subdirectories are hub-owned (see .gitignore); only the
-    // top-level core-owned tool test files run.
+    // Keep vendor bundles out, but run the built-in tools tracked in .gitignore.
     exclude: [
       '.stryker-tmp/**',
       '**/node_modules/**',
       'koris-hub/**',
       'artifacts/**',
       'plugins/channels/*/**',
-      'plugins/tools/*/**',
+      'plugins/tools/!(delete-beat|list-beats|set-beat|update-beat|send-message)/**',
     ],
     coverage: {
       provider: 'v8',
@@ -29,22 +28,22 @@ export default defineConfig({
         'node_modules/**',
         'dist/**',
         '**/*.test.ts',
-        '**/*.config.ts',
+        '**/*.config.{ts,mts}',
         // Hub-owned bundles pulled into plugins/* are gitignored vendor code
         // (see .gitignore) and are already skipped by test.exclude above —
         // keep them out of coverage too, or their bundled size swamps the
         // global thresholds.
         'plugins/channels/*/**',
-        'plugins/tools/*/**',
+        'plugins/tools/!(delete-beat|list-beats|set-beat|update-beat|send-message)/**',
       ],
     },
-    onConsoleLog(log: string, type: 'stdout' | 'stderr'): boolean | void {
-      return false;  // NO console.log() statements will be printed!
+    onConsoleLog(): boolean {
+      return false;
     },
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './core/src'),
+      '@': path.resolve(import.meta.dirname, './core/src'),
     },
   },
 });

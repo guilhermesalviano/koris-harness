@@ -38,7 +38,8 @@ export async function streamChat(
   });
 
   if (!res.ok) {
-    throw new Error(`API error ${res.status}`);
+    const body = await res.json?.().catch(() => null);
+    throw new Error(typeof body?.error === 'string' ? body.error : `API error ${res.status}`);
   }
 
   if (!res.body) {
@@ -48,66 +49,58 @@ export async function streamChat(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let streamError: Error | null = null;
+  let ended = false;
 
-  const handleLine = (line: string) => {
-    if (!line.startsWith('data: ')) return;
-    const payload = line.slice(6).trim();
-    if (payload === '[DONE]') return;
+  const handleLine = (line: string): boolean => {
+    if (!line.startsWith('data:')) return false;
+    const payload = line.slice(5).trim();
+    if (payload === '[DONE]') return true;
 
+    let parsed: SseEvent;
     try {
-      const parsed = JSON.parse(payload) as SseEvent;
-
-      if (parsed.type === 'progress' && parsed.delta?.status) {
-        onStatus(parsed.delta.status);
-        return;
-      }
-
-      if (parsed.type === 'session' && parsed.sessionId) {
-        onSession?.(parsed.sessionId);
-        return;
-      }
-
-      if (parsed.type === 'mode' && (parsed.mode === 'text' || parsed.mode === 'voice')) {
-        onMode?.(parsed.mode);
-        return;
-      }
-
-      if (parsed.type === 'error' && parsed.error) {
-        streamError = new Error(parsed.error.message);
-        return;
-      }
-
-      if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-        onText(parsed.delta.text);
-      }
+      parsed = JSON.parse(payload) as SseEvent;
     } catch {
-      // skip malformed SSE lines
+      return false;
     }
+    if (!parsed || typeof parsed !== 'object') return false;
+
+    if (parsed.type === 'progress' && typeof parsed.delta?.status === 'string') {
+      onStatus(parsed.delta.status);
+    } else if (parsed.type === 'session' && typeof parsed.sessionId === 'string') {
+      onSession?.(parsed.sessionId);
+    } else if (parsed.type === 'mode' && (parsed.mode === 'text' || parsed.mode === 'voice')) {
+      onMode?.(parsed.mode);
+    } else if (parsed.type === 'error' && parsed.error) {
+      throw new Error(parsed.error.message);
+    } else if (parsed.type === 'content_block_delta' && typeof parsed.delta?.text === 'string') {
+      onText(parsed.delta.text);
+    }
+    return false;
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+  try {
+    while (!ended) {
+      const { done, value } = await reader.read();
+      ended = done;
+      buffer += decoder.decode(value, { stream: !done });
 
-    let newlineIdx = buffer.indexOf('\n');
-    while (newlineIdx !== -1) {
-      const line = buffer.slice(0, newlineIdx).replace(/\r$/, '');
-      buffer = buffer.slice(newlineIdx + 1);
-      handleLine(line);
-      newlineIdx = buffer.indexOf('\n');
+      let newlineIdx = buffer.indexOf('\n');
+      while (newlineIdx !== -1) {
+        const line = buffer.slice(0, newlineIdx).replace(/\r$/, '');
+        buffer = buffer.slice(newlineIdx + 1);
+        if (handleLine(line)) return;
+        newlineIdx = buffer.indexOf('\n');
+      }
     }
-
-    if (done) break;
-  }
-
-  const tail = (buffer + decoder.decode()).replace(/\r$/, '');
-  if (tail.trim()) {
-    handleLine(tail);
-  }
-
-  if (streamError) {
-    throw streamError;
+    if (buffer.trim()) handleLine(buffer.replace(/\r$/, ''));
+  } finally {
+    try {
+      if (!ended) await reader.cancel();
+    } catch {
+      // Preserve the original callback/transport error if cancellation fails.
+    } finally {
+      reader.releaseLock();
+    }
   }
 }
 
@@ -138,9 +131,11 @@ export class ApiRequestError extends Error {
 }
 
 export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers = new Headers(options.headers);
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const res = await fetch(`/api/admin${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   });
 
   const isJson = (res.headers.get('content-type') || '').includes('application/json');
@@ -152,7 +147,7 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
     );
     const details = body && (body as { details?: unknown }).details;
     if (Array.isArray(details)) {
-      error.details = details as string[];
+      error.details = details.filter((detail): detail is string => typeof detail === 'string');
     }
     throw error;
   }

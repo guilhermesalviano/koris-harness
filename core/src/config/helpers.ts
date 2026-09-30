@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'fs';
 import { join, normalize } from 'path';
+import { isPlainObject } from '../../../plugins/config/merge';
 
 export interface ConfigFileIO {
   exists(path: string): boolean;
@@ -26,6 +27,7 @@ export function resolveConfigPaths(cwd: string = resolveDataDir(), dirname: stri
     join(cwd, 'apps', 'client', 'koris.json'),
     join(dirname, '..', '..', 'koris.json'),
     join(dirname, '..', '..', '..', 'koris.json'),
+    join(dirname, '..', '..', '..', '..', 'koris.json'),
   ].map((path) => normalize(path))));
 }
 
@@ -50,7 +52,9 @@ export function loadConfigFile(options?: {
   }
 
   try {
-    return JSON.parse(fileIO.read(configPath)) as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(fileIO.read(configPath));
+    if (!isPlainObject(parsed)) throw new Error('Settings must contain a JSON object.');
+    return parsed;
   } catch {
     options?.onParseError?.('Warning: Failed to parse koris.json, ignoring file.');
     return {};
@@ -59,7 +63,7 @@ export function loadConfigFile(options?: {
 
 export function deepGet(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce<unknown>((acc, key) => {
-    if (acc && typeof acc === 'object') {
+    if (acc && typeof acc === 'object' && Object.prototype.hasOwnProperty.call(acc, key)) {
       return (acc as Record<string, unknown>)[key];
     }
 

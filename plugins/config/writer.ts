@@ -1,6 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { dirname, join, normalize } from 'path';
 import { parse, stringify } from 'yaml';
+import { isPlainObject, mergeConfigPatch } from './merge';
+import { writeConfigFileAtomic } from './persistence';
+
+export { mergeConfigPatch as mergePluginConfigPatch } from './merge';
 
 export interface PluginConfigWriteOptions {
   pluginDir: string;
@@ -8,31 +12,6 @@ export interface PluginConfigWriteOptions {
   exists?: (path: string) => boolean;
   readFile?: (path: string) => string;
   writeFile?: (path: string, content: string) => void;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-/**
- * Recursively merges a partial config patch onto a base config object.
- * Mirrors `src/config/settings-writer.ts`'s `mergeSettingsPayload` — kept as
- * a small separate copy since plugins may not import from `src/`.
- */
-export function mergePluginConfigPatch(
-  base: Record<string, unknown>,
-  patch: Record<string, unknown>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...base };
-
-  for (const [key, patchValue] of Object.entries(patch)) {
-    const baseValue = result[key];
-    result[key] = isPlainObject(patchValue) && isPlainObject(baseValue)
-      ? mergePluginConfigPatch(baseValue, patchValue)
-      : patchValue;
-  }
-
-  return result;
 }
 
 /**
@@ -51,24 +30,21 @@ export function writePluginConfigPatch(
 
   let current: Record<string, unknown> = {};
   if (exists(path)) {
-    try {
-      const parsed: unknown = parse(readFile(path));
-      if (isPlainObject(parsed)) {
-        current = parsed;
-      }
-    } catch {
-      // Corrupt existing file — overwrite it with the patch instead of failing the write.
+    const parsed: unknown = parse(readFile(path));
+    if (parsed !== null && !isPlainObject(parsed)) {
+      throw new Error(`Plugin config ${path} must contain a YAML object.`);
     }
+    current = parsed ?? {};
   }
 
-  const merged = mergePluginConfigPatch(current, patch);
+  const merged = mergeConfigPatch(current, patch);
   const content = stringify(merged);
 
   mkdirSync(dirname(path), { recursive: true });
   if (options.writeFile) {
     options.writeFile(path, content);
   } else {
-    writeFileSync(path, content, 'utf-8');
+    writeConfigFileAtomic(path, content);
   }
 
   return path;

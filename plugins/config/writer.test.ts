@@ -89,9 +89,9 @@ describe('writePluginConfigPatch', () => {
     expect(path).toBe(normalize(join(pluginDir, 'settings.yml')));
   });
 
-  it('overwrites a corrupt existing file instead of throwing', () => {
+  it('preserves a corrupt existing file and reports the parse failure', () => {
     const writeFile = vi.fn();
-    writePluginConfigPatch(
+    expect(() => writePluginConfigPatch(
       { fresh: true },
       {
         pluginDir,
@@ -99,17 +99,31 @@ describe('writePluginConfigPatch', () => {
         readFile: () => ':\n  - not: valid: yaml: at all\n[',
         writeFile,
       },
-    );
-    expect(parse(writeFile.mock.calls[0][1])).toEqual({ fresh: true });
+    )).toThrow();
+    expect(writeFile).not.toHaveBeenCalled();
   });
 
-  it('ignores a non-object parse result (e.g. a bare scalar file)', () => {
+  it('refuses to replace a non-object config with a partial patch', () => {
     const writeFile = vi.fn();
-    writePluginConfigPatch(
+    expect(() => writePluginConfigPatch(
       { fresh: true },
       { pluginDir, exists: () => true, readFile: () => '"just a string"', writeFile },
-    );
-    expect(parse(writeFile.mock.calls[0][1])).toEqual({ fresh: true });
+    )).toThrow('must contain a YAML object');
+    expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  it('allows writing a patch to an empty YAML file', () => {
+    writeFileSync(join(pluginDir, 'config.yml'), '');
+    writePluginConfigPatch({ fresh: true }, { pluginDir });
+    expect(parse(readFileSync(join(pluginDir, 'config.yml'), 'utf-8'))).toEqual({ fresh: true });
+  });
+
+  it('leaves a malformed file intact on the real filesystem', () => {
+    const destination = join(pluginDir, 'config.yml');
+    const malformed = 'token: original\nbroken: [\n';
+    writeFileSync(destination, malformed);
+    expect(() => writePluginConfigPatch({ fresh: true }, { pluginDir })).toThrow();
+    expect(readFileSync(destination, 'utf-8')).toBe(malformed);
   });
 
   it('uses the real filesystem when no file IO is injected', () => {

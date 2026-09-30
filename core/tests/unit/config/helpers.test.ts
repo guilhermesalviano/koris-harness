@@ -70,4 +70,26 @@ describe('config/helpers', () => {
     writeFileSync(join(repoRoot, 'koris.json'), '{}');
     expect(isConfigFilePresent(repoRoot)).toBe(true);
   });
+
+  it('finds package settings from the compiled core layout outside the package cwd', () => {
+    const packageRoot = createTempDir();
+    const unrelatedCwd = createTempDir();
+    writeFileSync(join(packageRoot, 'koris.json'), '{"web_port":4000}');
+    expect(loadConfigFile({ cwd: unrelatedCwd, dirname: join(packageRoot, 'dist', 'core', 'src', 'config') }))
+      .toEqual({ web_port: 4000 });
+  });
+
+  it.each(['null', '[]', '"text"', '42'])('ignores non-object config %s', (content) => {
+    const warnings: string[] = [];
+    expect(loadConfigFile({
+      fileIO: { exists: () => true, read: () => content },
+      onParseError: (message) => warnings.push(message),
+    })).toEqual({});
+    expect(warnings).toHaveLength(1);
+  });
+
+  it('does not read inherited config values', () => {
+    expect(getConfigValue('constructor.name', 'fallback', {}, {})).toBe('fallback');
+    expect(getConfigValue('toString', 'fallback', {}, {})).toBe('fallback');
+  });
 });

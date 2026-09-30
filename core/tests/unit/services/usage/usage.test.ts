@@ -41,6 +41,22 @@ function toolRow(overrides: Partial<UsageRow> = {}): UsageRow {
 }
 
 describe('usage engine', () => {
+  it('counts arbitrary agent, channel, and tool names without reading inherited properties', () => {
+    const report = buildUsageReport([
+      llmRow({ agent_name: '__proto__', channel: 'constructor' }),
+      toolRow({ tool_name: 'toString', agent_name: '__proto__', channel: 'constructor' }),
+    ]);
+    expect(report.byAgent.__proto__.calls).toBe(1);
+    expect(report.byAgent.__proto__.toolCalls).toBe(1);
+    expect(report.byChannel.constructor.totalTokens).toBe(150);
+    expect(report.byTool.toString.toolCalls).toBe(1);
+    expect(JSON.parse(JSON.stringify(report)).byAgent.__proto__.totalTokens).toBe(150);
+  });
+
+  it('handles an out-of-range reporting period without throwing', () => {
+    expect(usageFrom(Number.MAX_SAFE_INTEGER)).toBeUndefined();
+  });
+
   it('estimateTokens approximates chars / 4', () => {
     expect(estimateTokens(8)).toBe(2);
     expect(estimateTokens(1)).toBe(1);

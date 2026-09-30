@@ -1,6 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { dirname as pathDirname, join, normalize } from 'path';
 import { resolveConfigPaths, resolveDataDir } from './helpers';
+import { isPlainObject } from '../../../plugins/config/merge';
+import { writeConfigFileAtomic } from '../../../plugins/config/persistence';
+
+export { mergeConfigPatch as mergeSettingsPayload } from '../../../plugins/config/merge';
 
 export { applyAiProviderPatch, applyAiRolePatch, applyAiEmbedPatch, upsertAiProvider } from './ai-config';
 export type { AiProviderPatch, AiRolePatch, AiEmbedPatch } from './ai-config';
@@ -29,6 +33,7 @@ function resolveAppRoot(options?: SettingsWriterOptions): string {
     join(dirname, '..'),
     join(dirname, '..', '..'),
     join(dirname, '..', '..', '..'),
+    join(dirname, '..', '..', '..', '..'),
     cwd,
   ].map((candidate) => normalize(candidate)).find((candidate) =>
     exists(join(candidate, 'package.json')),
@@ -42,11 +47,12 @@ function resolveExampleSettingsPath(options?: SettingsWriterOptions): string {
   const dirname = options?.dirname ?? __dirname;
   const exists = options?.exists ?? existsSync;
   const configPath = resolveConfigPaths(cwd, dirname).find((candidate) => exists(candidate));
-  if (configPath) {
-    return normalize(join(pathDirname(configPath), EXAMPLE_SETTINGS_FILENAME));
-  }
-
-  return normalize(join(resolveAppRoot(options), EXAMPLE_SETTINGS_FILENAME));
+  const candidates = [
+    ...(configPath ? [join(pathDirname(configPath), EXAMPLE_SETTINGS_FILENAME)] : []),
+    join(cwd, EXAMPLE_SETTINGS_FILENAME),
+    join(resolveAppRoot(options), EXAMPLE_SETTINGS_FILENAME),
+  ].map((candidate) => normalize(candidate));
+  return candidates.find(exists) ?? candidates[candidates.length - 1];
 }
 
 /**
@@ -57,6 +63,11 @@ export function resolveSettingsWritePath(options?: SettingsWriterOptions): strin
   const cwd = options?.cwd ?? resolveDataDir();
   const dirname = options?.dirname ?? __dirname;
   const exists = options?.exists ?? existsSync;
+  // A relocated data root is always the write destination, even when reads
+  // fall back to a config shipped in the application bundle.
+  if (!options?.cwd && process.env.KORIS_DATA_DIR) {
+    return normalize(join(cwd, SETTINGS_FILENAME));
+  }
   const configPath = resolveConfigPaths(cwd, dirname).find((candidate) => exists(candidate));
   if (configPath) {
     return normalize(join(pathDirname(configPath), SETTINGS_FILENAME));
@@ -71,7 +82,7 @@ export function resolveSettingsWritePath(options?: SettingsWriterOptions): strin
 export function loadExampleSettingsTemplate(options?: SettingsWriterOptions): Record<string, unknown> {
   const sourcePath = resolveExampleSettingsPath(options);
   const readFile = options?.readFile ?? ((path: string) => readFileSync(path, 'utf-8'));
-  return JSON.parse(readFile(sourcePath)) as Record<string, unknown>;
+  return parseSettings(readFile(sourcePath));
 }
 
 /**
@@ -86,39 +97,16 @@ export function loadCurrentOrExampleSettings(options?: SettingsWriterOptions): R
 
   const configPath = resolveConfigPaths(cwd, dirname).find((candidate) => exists(candidate));
   if (configPath) {
-    return JSON.parse(readFile(configPath)) as Record<string, unknown>;
+    return parseSettings(readFile(configPath));
   }
 
   return loadExampleSettingsTemplate(options);
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-/**
- * Recursively merges a partial settings patch onto a base settings object.
- * Plain objects are merged key-by-key; arrays and primitives in the patch
- * replace the base value wholesale (so e.g. `allowed_domains: [...]` or
- * `personal_information: {...}` submitted by the wizard fully replaces the
- * previous list/map rather than appending to it).
- */
-export function mergeSettingsPayload(
-  base: Record<string, unknown>,
-  patch: Record<string, unknown>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...base };
-
-  for (const [key, patchValue] of Object.entries(patch)) {
-    const baseValue = result[key];
-    if (isPlainObject(patchValue) && isPlainObject(baseValue)) {
-      result[key] = mergeSettingsPayload(baseValue, patchValue);
-    } else {
-      result[key] = patchValue;
-    }
-  }
-
-  return result;
+function parseSettings(content: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(content);
+  if (!isPlainObject(parsed)) throw new Error('Settings must contain a JSON object.');
+  return parsed;
 }
 
 /**
@@ -133,7 +121,7 @@ export function writeSettingsFile(payload: Record<string, unknown>, options?: Se
   if (options?.writeFile) {
     options.writeFile(destination, content);
   } else {
-    writeFileSync(destination, content, 'utf-8');
+    writeConfigFileAtomic(destination, content);
   }
 
   return destination;

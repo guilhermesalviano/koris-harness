@@ -25,12 +25,9 @@ function getPersonalInformation(): Record<string, string> {
     return {};
   }
 
-  return Object.entries(raw).reduce<Record<string, string>>((acc, [key, value]) => {
-    if (value !== undefined && value !== null) {
-      acc[key] = String(value);
-    }
-    return acc;
-  }, {});
+  return Object.fromEntries(Object.entries(raw)
+    .filter(([, value]) => value !== undefined && value !== null)
+    .map(([key, value]) => [key, String(value)]));
 }
 
 export type SummarizerMode = 'auto' | 'manual';

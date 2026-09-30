@@ -1,15 +1,11 @@
 import express, { type Request, type Response, type Router } from 'express';
 import { config, reloadConfig } from '../config';
 import { isConfigFilePresent } from '../config/helpers';
-import {
-  VALID_LOG_LEVELS,
-  isValidUrl,
-  isValidLogLevel,
-  isSupportedProvider,
-  checkAiProviderConnectivity,
-} from '../config/validators';
-import { applyAiProviderPatch, applyAiRolePatch, applyAiEmbedPatch, loadCurrentOrExampleSettings, mergeSettingsPayload, writeSettingsFile } from '../config/settings-writer';
-import type { AiRolePatch, AiEmbedPatch } from '../config/settings-writer';
+import { checkAiProviderConnectivity } from '../config/validators';
+import { loadCurrentOrExampleSettings, writeSettingsFile } from '../config/settings-writer';
+import { asRecord, buildSettingsUpdate, collectSettingsPayloadErrors } from './settings-payload';
+import { maskDeep, maskSecret } from './secrets';
+import { parsePagination, queryInteger } from './pagination';
 import { DEFAULT_NUM_CTX } from '../config/ai-config';
 import { estimateSessionTokens, compactTriggerTokens } from '../services/agents/context-budget';
 import { addAllowedDomain } from '../services/security/allowed-domains';
@@ -75,31 +71,6 @@ import { listInstalledChannelNames } from '../services/commands/channels';
 
 const ONE_TIME_CRON_ERROR = 'A one-time beat needs a pinned date: exact minute, hour, day-of-month and month, with "*" as day-of-week (e.g. "30 9 15 6 *").';
 
-const MASKED_KEYS = new Set(['BOT_TOKEN', 'API_TOKEN', 'BEARER_TOKEN', 'bearerToken', 'bearer_token']);
-
-function maskDeep(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => maskDeep(item));
-  }
-
-  if (value && typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-      out[key] = MASKED_KEYS.has(key) && typeof val === 'string' && val
-        ? maskSecret(val)
-        : maskDeep(val);
-    }
-    return out;
-  }
-
-  return value;
-}
-
-function maskSecret(value: string): string {
-  if (value.length <= 4) return '••••';
-  return `${value.slice(0, 2)}••••${value.slice(-2)}`;
-}
-
 /**
  * Reassembles the `CHANNELS.WHATSAPP` shape the frontend expects,
  * sourcing every field (including the per-channel `ALLOW_UNLISTED_SENDERS`
@@ -123,141 +94,6 @@ function buildChannelsSnapshot(pluginSettingsRepo: IPluginSettingsRepository) {
 
 function buildSettingsResponse(pluginSettingsRepo: IPluginSettingsRepository): Record<string, unknown> {
   return { ...config, CHANNELS: buildChannelsSnapshot(pluginSettingsRepo) };
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-/** Maps a snake_case per-role settings patch to an `AiRolePatch`. */
-function toAiRolePatch(profile: Record<string, unknown>): AiRolePatch {
-  const patch: AiRolePatch = { provider: String(profile.provider) };
-  if (typeof profile.base_url === 'string') patch.base_url = profile.base_url;
-  if (typeof profile.api_token === 'string') patch.api_token = profile.api_token;
-  if (typeof profile.model === 'string') patch.model = profile.model;
-  if (profile.num_ctx !== undefined && Number.isFinite(Number(profile.num_ctx))) {
-    patch.num_ctx = Number(profile.num_ctx);
-  }
-  return patch;
-}
-
-/** Maps a snake_case `ai.embed` settings patch to an `AiEmbedPatch`. */
-function toAiEmbedPatch(profile: Record<string, unknown>): AiEmbedPatch {
-  const patch: AiEmbedPatch = { provider: String(profile.provider) };
-  if (typeof profile.enabled === 'boolean') patch.enabled = profile.enabled;
-  if (typeof profile.model === 'string') patch.model = profile.model;
-  if (typeof profile.base_url === 'string') patch.base_url = profile.base_url;
-  if (typeof profile.api_token === 'string') patch.api_token = profile.api_token;
-  return patch;
-}
-
-function collectSettingsPayloadErrors(
-  payload: Record<string, unknown>,
-): string[] {
-  const errors: string[] = [];
-
-  if ('web_port' in payload) {
-    const port = Number(payload.web_port);
-    if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-      errors.push('web_port must be an integer between 1 and 65535.');
-    }
-  }
-
-  if (typeof payload.log_level === 'string' && !isValidLogLevel(payload.log_level)) {
-    errors.push(`log_level must be one of: ${VALID_LOG_LEVELS.join(', ')}.`);
-  }
-
-  if (typeof payload.gateway_host === 'string' && payload.gateway_host && !isValidUrl(payload.gateway_host)) {
-    errors.push('gateway_host must be a valid URL.');
-  }
-
-  const skills = asRecord(payload.skills);
-  if (skills) {
-    if (skills.mode !== undefined && skills.mode !== 'auto' && skills.mode !== 'manual') {
-      errors.push('skills.mode must be "auto" or "manual".');
-    }
-    if (skills.limit !== undefined && skills.limit !== '') {
-      const limit = Number(skills.limit);
-      if (!Number.isInteger(limit) || limit < 1) {
-        errors.push('skills.limit must be a positive integer.');
-      }
-    }
-  }
-
-  const ai = asRecord(payload.ai);
-  if (ai) {
-    // `ai.<role>` = save + activate for that role; `ai.provider` = save only.
-    for (const key of ['manager', 'workers', 'provider'] as const) {
-      const profile = asRecord(ai[key]);
-      if (!profile) continue;
-      const label = `ai.${key}`;
-
-      if (typeof profile.provider === 'string' && profile.provider === 'mock') {
-        errors.push(`${label}.provider "mock" is reserved for internal testing and cannot be set here.`);
-      } else if (typeof profile.provider === 'string' && !isSupportedProvider(profile.provider)) {
-        errors.push(`${label}.provider "${profile.provider}" is not supported.`);
-      }
-      if (typeof profile.base_url === 'string' && profile.base_url && !isValidUrl(profile.base_url)) {
-        errors.push(`${label}.base_url must be a valid URL.`);
-      }
-      if (typeof profile.model === 'string' && !profile.model.trim()) {
-        errors.push(`${label}.model must not be empty.`);
-      }
-      if (profile.num_ctx !== undefined && profile.num_ctx !== '') {
-        const numCtx = Number(profile.num_ctx);
-        if (!Number.isInteger(numCtx) || numCtx < 512 || numCtx > 131072) {
-          errors.push(`${label}.num_ctx must be an integer between 512 and 131072.`);
-        }
-      }
-    }
-
-    // `num_ctx` (and model) live on the shared `ai.providers[]` entry keyed by
-    // provider name, so a manager + workers patch that names the same provider
-    // with different context sizes would silently clobber one on save. Reject it
-    // rather than lose the value.
-    const managerProfile = asRecord(ai.manager);
-    const workersProfile = asRecord(ai.workers);
-    if (
-      managerProfile
-      && workersProfile
-      && typeof managerProfile.provider === 'string'
-      && managerProfile.provider === workersProfile.provider
-      && managerProfile.num_ctx !== undefined && managerProfile.num_ctx !== ''
-      && workersProfile.num_ctx !== undefined && workersProfile.num_ctx !== ''
-      && Number(managerProfile.num_ctx) !== Number(workersProfile.num_ctx)
-    ) {
-      errors.push(
-        `ai.manager and ai.workers both use provider "${managerProfile.provider}", whose num_ctx is shared. `
-        + 'Set the same num_ctx for both roles, or point them at separate provider entries.',
-      );
-    }
-
-    const embed = asRecord(ai.embed);
-    if (embed) {
-      const label = 'ai.embed';
-      if (typeof embed.provider === 'string' && embed.provider === 'mock') {
-        errors.push(`${label}.provider "mock" is reserved for internal testing and cannot be set here.`);
-      } else if (typeof embed.provider === 'string' && !isSupportedProvider(embed.provider)) {
-        errors.push(`${label}.provider "${embed.provider}" is not supported.`);
-      }
-      if (typeof embed.base_url === 'string' && embed.base_url && !isValidUrl(embed.base_url)) {
-        errors.push(`${label}.base_url must be a valid URL.`);
-      }
-      if (embed.enabled !== false && typeof embed.model === 'string' && !embed.model.trim()) {
-        errors.push(`${label}.model must not be empty when embeddings are enabled.`);
-      }
-    }
-  }
-
-  return errors;
-}
-
-function parsePagination(req: Request): { limit: number; offset: number } {
-  const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 200);
-  const offset = Math.max(Number(req.query.offset) || 0, 0);
-  return { limit, offset };
 }
 
 /** The principal's own web chat — every session on it forms the Orchestrator thread. */
@@ -474,7 +310,7 @@ class AdminRouterFactory {
         res.status(400).json({ error: 'Invalid cursor' });
         return;
       }
-      const limit = Math.min(Math.max(Number(req.query.limit) || TIMELINE_DEFAULT_LIMIT, 1), 200);
+      const limit = queryInteger(req.query.limit, TIMELINE_DEFAULT_LIMIT, 1, 200);
 
       const page = messageRepo.getTimeline({ key: ORCHESTRATOR_THREAD, before, limit });
       const active = sessionRepo.findLatestOpen(ORCHESTRATOR_THREAD);
@@ -701,8 +537,8 @@ class AdminRouterFactory {
       let days: number | null = null;
 
       if (typeof rawDays === 'string' && rawDays !== '') {
-        const parsed = Number.parseInt(rawDays, 10);
-        if (!Number.isNaN(parsed) && parsed >= 0) {
+        const parsed = Number(rawDays);
+        if (Number.isSafeInteger(parsed) && parsed >= 0) {
           days = parsed;
         }
       }
@@ -764,8 +600,7 @@ class AdminRouterFactory {
 
     // Latest executed beats, newest first, with the tools each run called.
     router.get('/heartbeats/runs', (req: Request, res: Response) => {
-      const requested = Number(req.query.limit);
-      const limit = Number.isInteger(requested) && requested > 0 ? Math.min(requested, 100) : 20;
+      const limit = queryInteger(req.query.limit, 20, 1, 100);
       res.json({
         items: beatRunRepo.findRecent(limit).map((run) => ({
           id: run.id,
@@ -1277,73 +1112,10 @@ class AdminRouterFactory {
         return;
       }
 
-      const rawPatch = patch as Record<string, unknown>;
-      const channelsPatch = asRecord(rawPatch.channels);
-      // Split `channels.*` into live-channel `config.yml` patches (any key that
-      // matches a discovered live channel) and the rest, which stays in the
-      // core settings file. No channel is named here.
-      const liveNames = new Set(liveChannelNames());
-      const channelConfigPatches: { name: string; patch: Record<string, unknown> }[] = [];
-      const coreChannelsPatch: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(channelsPatch ?? {})) {
-        const record = asRecord(value);
-        if (liveNames.has(key) && record) {
-          channelConfigPatches.push({ name: key, patch: record });
-        } else {
-          coreChannelsPatch[key] = value;
-        }
-      }
-      const corePatch: Record<string, unknown> = { ...rawPatch };
-      if (channelsPatch) {
-        corePatch.channels = coreChannelsPatch;
-      }
-
-      // The web UI still sends provider changes as a per-role patch
-      // (`{ ai: { manager: { provider, base_url, model, api_token } } }`).
-      // Translate each role into an `ai.providers[]` upsert + `ai.roles`
-      // repoint so previously-configured providers are preserved on disk.
-      // `ai.<role>` patch = save the provider AND make it active for that role.
-      // `ai.provider` patch = save the provider's config only (no role change).
-      const aiPatch = asRecord(corePatch.ai);
-      const rolePatches: { role: 'manager' | 'workers'; patch: AiRolePatch }[] = [];
-      let providerOnlyPatch: AiRolePatch | undefined;
-      let embedPatch: AiEmbedPatch | undefined;
-      if (aiPatch) {
-        const restAi: Record<string, unknown> = { ...aiPatch };
-        for (const role of ['manager', 'workers'] as const) {
-          const profile = asRecord(aiPatch[role]);
-          if (!profile) continue;
-          delete restAi[role];
-          if (typeof profile.provider !== 'string' || !profile.provider.trim()) continue;
-          rolePatches.push({ role, patch: toAiRolePatch(profile) });
-        }
-        const providerProfile = asRecord(aiPatch.provider);
-        if (providerProfile && typeof providerProfile.provider === 'string' && providerProfile.provider.trim()) {
-          delete restAi.provider;
-          providerOnlyPatch = toAiRolePatch(providerProfile);
-        }
-        const embedProfile = asRecord(aiPatch.embed);
-        if (embedProfile && typeof embedProfile.provider === 'string' && embedProfile.provider.trim()) {
-          delete restAi.embed;
-          embedPatch = toAiEmbedPatch(embedProfile);
-        }
-        corePatch.ai = restAi;
-      }
-
-      let current = loadCurrentOrExampleSettings();
-      if (providerOnlyPatch) {
-        current = applyAiProviderPatch(current, providerOnlyPatch);
-      }
-      for (const { role, patch: rolePatch } of rolePatches) {
-        current = applyAiRolePatch(current, role, rolePatch);
-      }
-      if (embedPatch) {
-        current = applyAiEmbedPatch(current, embedPatch);
-      }
-      const merged = mergeSettingsPayload(current, corePatch);
-      const personalInformation = asRecord(corePatch.personal_information);
-      if (personalInformation) merged.personal_information = personalInformation;
-      const writtenPath = writeSettingsFile(merged);
+      const { settings, channelConfigPatches } = buildSettingsUpdate(
+        loadCurrentOrExampleSettings(), patch as Record<string, unknown>, liveChannelNames(),
+      );
+      const writtenPath = writeSettingsFile(settings);
 
       // `enabled` is DB-backed now (see PATCH /plugins/:family/:name) — strip it
       // defensively so a stale cached frontend can't write it back into config.yml.

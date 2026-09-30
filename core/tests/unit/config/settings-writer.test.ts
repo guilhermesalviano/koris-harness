@@ -1,6 +1,6 @@
 /// <reference types="node" />
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync, copyFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -26,6 +26,7 @@ function createTempDir(): string {
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -158,5 +159,27 @@ describe('config/settings-writer', () => {
 
     expect(loaded).toHaveProperty('web_port');
     expect(loaded).toHaveProperty('ai');
+  });
+
+  it('loads the bundled example when relocated settings have no adjacent example', () => {
+    const directory = createTempDir();
+    writeFileSync(join(directory, 'koris.json'), '{}');
+    expect(loadExampleSettingsTemplate({ cwd: directory })).toHaveProperty('ai');
+  });
+
+  it('writes first-time settings into KORIS_DATA_DIR rather than the package root', () => {
+    const directory = createTempDir();
+    vi.stubEnv('KORIS_DATA_DIR', directory);
+    expect(writeSettingsFile({ web_port: 4000 })).toBe(join(directory, 'koris.json'));
+    expect(JSON.parse(readFileSync(join(directory, 'koris.json'), 'utf-8'))).toEqual({ web_port: 4000 });
+  });
+
+  it.each(['null', '[]', '"text"'])('refuses to overwrite non-object settings %s', (content) => {
+    const directory = createTempDir();
+    const destination = join(directory, 'koris.json');
+    writeFileSync(destination, content);
+    expect(() => loadCurrentOrExampleSettings({ cwd: directory, dirname: directory }))
+      .toThrow('Settings must contain a JSON object.');
+    expect(readFileSync(destination, 'utf-8')).toBe(content);
   });
 });

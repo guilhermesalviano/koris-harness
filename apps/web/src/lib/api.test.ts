@@ -42,6 +42,17 @@ describe('apps/web api', () => {
   });
 
   describe('apiRequest', () => {
+    it.each([new Headers({ Authorization: 'Bearer token' }), { Authorization: 'Bearer token' }, [['Authorization', 'Bearer token']]])
+      ('merges caller headers without losing the JSON content type', async (headers) => {
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('{}', {
+          headers: { 'content-type': 'application/json' },
+        }));
+        await apiRequest('/settings', { headers: headers as HeadersInit });
+        const sent = fetchSpy.mock.calls[0][1]!.headers as Headers;
+        expect(sent.get('Authorization')).toBe('Bearer token');
+        expect(sent.get('Content-Type')).toBe('application/json');
+      });
+
     it('makes a JSON request and returns response payload', async () => {
       const mockHeaders = new Headers({ 'content-type': 'application/json' });
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
@@ -108,6 +119,66 @@ describe('apps/web api', () => {
         body: stream,
       } as Response;
     }
+
+    it('stops at DONE and releases an open response stream', async () => {
+      const cancel = vi.fn();
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data:{"type":"content_block_delta","delta":{"text":"Olá"}}\r\ndata: [DONE]\n'));
+        },
+        cancel,
+      });
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(body));
+      const onText = vi.fn();
+      await streamChat('hi', null, [], vi.fn(), onText);
+      expect(onText).toHaveBeenCalledWith('Olá');
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(body.locked).toBe(false);
+    });
+
+    it('propagates callback errors and cancels the response', async () => {
+      const cancel = vi.fn();
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"type":"content_block_delta","delta":{"text":"ok"}}\n'));
+        },
+        cancel,
+      });
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(body));
+      await expect(streamChat('hi', null, [], vi.fn(), () => { throw new Error('callback failed'); }))
+        .rejects.toThrow('callback failed');
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(body.locked).toBe(false);
+    });
+
+    it('releases the reader after transport errors', async () => {
+      const body = new ReadableStream<Uint8Array>({ start(controller) { controller.error(new Error('offline')); } });
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(body));
+      await expect(streamChat('hi', null, [], vi.fn(), vi.fn())).rejects.toThrow('offline');
+      expect(body.locked).toBe(false);
+    });
+
+    it('preserves UTF-8 bytes split across chunks and an unterminated final event', async () => {
+      const bytes = new TextEncoder().encode('data: {"type":"content_block_delta","delta":{"text":"👋 olá"}}');
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const byte of bytes) controller.enqueue(new Uint8Array([byte]));
+          controller.close();
+        },
+      });
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(body));
+      const onText = vi.fn();
+      await streamChat('hi', null, [], vi.fn(), onText);
+      expect(onText).toHaveBeenCalledWith('👋 olá');
+      expect(body.locked).toBe(false);
+    });
+
+    it('surfaces server validation messages on HTTP errors', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('{"error":"too many images (max 10)"}', {
+        status: 400, headers: { 'content-type': 'application/json' },
+      }));
+      await expect(streamChat('hi', null, [], vi.fn(), vi.fn())).rejects.toThrow('too many images (max 10)');
+    });
 
     it('throws when the response is not ok', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({

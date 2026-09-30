@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { join, normalize } from 'path';
 import { parse } from 'yaml';
+import { isPlainObject } from './merge';
 
 export interface PluginConfigFileIO {
   exists(path: string): boolean;
@@ -35,9 +36,7 @@ export function loadPluginConfigFile(options: LoadPluginConfigFileOptions): Reco
 
   try {
     const parsed: unknown = parse(fileIO.read(path));
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    return isPlainObject(parsed) ? parsed : {};
   } catch {
     options.onParseError?.(`Warning: Failed to parse ${filename}, ignoring file.`);
     return {};
@@ -71,7 +70,8 @@ export interface ResolvePluginDirOptions {
  *   2. `<cwd>/plugins/<family>/<name>` (and the `apps/client/` variant) — the
  *      normal repo-root case, mirroring how `resolveConfigPaths` finds `koris.json`.
  *   3. `fallbackDir` (the caller's own `__dirname`) — running `.ts` sources in dev.
- * A candidate that already contains `config.yml` wins over a later one.
+ * The data directory always wins when configured; otherwise an existing file
+ * takes precedence over a later candidate.
  *
  * When nothing exists yet, a first-time write must NOT land in `fallbackDir`
  * from a compiled build: there `__dirname` is `dist/plugins/<family>/<name>`,
@@ -91,8 +91,9 @@ export function resolvePluginDir(pluginName: string, options: ResolvePluginDirOp
     ? normalize(join(dataDir, 'plugins', family, pluginName))
     : undefined;
 
+  if (dataDirCandidate) return dataDirCandidate;
+
   const candidates = [
-    ...(dataDirCandidate ? [dataDirCandidate] : []),
     join(cwd, 'plugins', family, pluginName),
     join(cwd, 'apps', 'client', 'plugins', family, pluginName),
   ].map((candidate) => normalize(candidate));
@@ -102,10 +103,6 @@ export function resolvePluginDir(pluginName: string, options: ResolvePluginDirOp
     return found;
   }
 
-  // Nothing written yet: prefer the writable data dir when relocated.
-  if (dataDirCandidate) {
-    return dataDirCandidate;
-  }
   // Then the repo-root plugins tree when we're clearly running inside the repo,
   // so a first-time write survives `pnpm build`'s `rm -rf dist` (unlike
   // `fallbackDir`, which from a compiled build points at `dist/`). In dev with
@@ -133,7 +130,7 @@ export function getPluginConfigValue(
     return String(env[envKey] ?? '');
   }
 
-  const value = yamlConfig[yamlKey];
+  const value = Object.prototype.hasOwnProperty.call(yamlConfig, yamlKey) ? yamlConfig[yamlKey] : undefined;
   if (value === undefined || value === null) {
     return fallback;
   }

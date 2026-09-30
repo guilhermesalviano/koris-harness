@@ -496,7 +496,7 @@ class DatabaseService implements IDatabaseService {
    */
   backup(targetPath: string): void {
     try {
-      this.db.exec(`VACUUM INTO '${targetPath}';`);
+      this.db.prepare('VACUUM INTO ?').run(targetPath);
       logger.info('[database] Database backed up', { targetPath });
     } catch (error) {
       logger.error('[database] Failed to backup database', { error, targetPath });

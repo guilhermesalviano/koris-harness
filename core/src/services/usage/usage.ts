@@ -44,14 +44,14 @@ export function usageFrom(days: number | null): string | undefined {
   }
 
   date.setDate(date.getDate() - days);
-  return formatISO(date);
+  return Number.isFinite(date.getTime()) ? formatISO(date) : undefined;
 }
 
 export function buildUsageReport(rows: UsageRow[], days: number | null = null): UsageReport {
   const total = emptyStats();
-  const byAgent: Record<string, UsageStats> = {};
-  const byChannel: Record<string, UsageStats> = {};
-  const byTool: Record<string, UsageStats> = {};
+  const byAgent: Record<string, UsageStats> = Object.create(null);
+  const byChannel: Record<string, UsageStats> = Object.create(null);
+  const byTool: Record<string, UsageStats> = Object.create(null);
   const toolByRun = new Map<string, Set<string>>();
   const runTokens = new Map<string, { input: number; output: number; duration: number }>();
 

@@ -5,6 +5,8 @@ import { validateBaseUrl } from '../../../utils/provider';
 import type { ProviderRegistration } from '../manifest';
 import { THINK_START, THINK_END } from '../../../constants/thinking';
 import { extractToolCalls } from '../../../utils/tool-calls';
+import { readJsonStream } from '../../../utils/json-stream';
+import { createRequestScope } from '../request-scope';
 
 type OllamaChatChunk = {
   message?: {
@@ -49,7 +51,7 @@ class OllamaAIProvider implements AIProvider {
   }
 
   async chat(request: AIChatRequest, options?: AIChatOptions): Promise<string> {
-    const { controller, cleanup } = this.makeController(options?.signal);
+    const { controller, cleanup } = createRequestScope({ signal: options?.signal, hardTimeoutMs: config.AI.TIMEOUTS.HARD_MS });
     try {
       this.logger.debug('Ollama chat request', {
         model: request.model ?? this.defaultModel,
@@ -75,13 +77,11 @@ class OllamaAIProvider implements AIProvider {
   }
 
   async *chatStream(request: AIChatRequest, options?: AIChatOptions): AsyncGenerator<string> {
-    const { controller, cleanup } = this.makeController(options?.signal);
-
-    let idleTimer: NodeJS.Timeout | undefined;
-    const bumpIdle = () => {
-      clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => controller.abort(), config.AI.TIMEOUTS.IDLE_MS);
-    };
+    const { controller, cleanup, bumpIdle } = createRequestScope({
+      signal: options?.signal,
+      hardTimeoutMs: config.AI.TIMEOUTS.HARD_MS,
+      idleTimeoutMs: config.AI.TIMEOUTS.IDLE_MS,
+    });
 
     let totalChunksReceived = 0;
     let totalCharsYielded = 0;
@@ -110,7 +110,7 @@ class OllamaAIProvider implements AIProvider {
       let producedAnswer = false;
 
       bumpIdle();
-      for await (const chunk of this.readNDJSON(body, bumpIdle)) {
+      for await (const chunk of readJsonStream<OllamaChatChunk>(body, bumpIdle, { stopOnDone: false })) {
         totalChunksReceived++;
         if (chunk.error) throw new Error(chunk.error);
 
@@ -206,7 +206,6 @@ class OllamaAIProvider implements AIProvider {
       }
       throw err;
     } finally {
-      clearTimeout(idleTimer);
       cleanup();
     }
   }
@@ -237,18 +236,24 @@ class OllamaAIProvider implements AIProvider {
       prompt: text
     });
 
-    const res = await fetch(`${this.baseUrl}/api/embeddings`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body
-    });
+    const { controller, cleanup } = createRequestScope({ hardTimeoutMs: config.AI.TIMEOUTS.HARD_MS });
+    try {
+      const res = await fetch(`${this.baseUrl}/api/embeddings`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+        signal: controller.signal,
+      });
 
-    if (!res.ok) {
-      throw new Error(`Ollama /api/embeddings failed (${res.status})`);
+      if (!res.ok) {
+        throw new Error(`Ollama /api/embeddings failed (${res.status})`);
+      }
+
+      const data = await res.json() as { embedding: number[] };
+      return data.embedding;
+    } finally {
+      cleanup();
     }
-
-    const data = await res.json() as { embedding: number[] };
-    return data.embedding;
   }
 
   private async postChat(
@@ -271,75 +276,6 @@ class OllamaAIProvider implements AIProvider {
       return { content: '', ...usage };
     }
     return { content, ...usage };
-  }
-
-  private makeController(outerSignal?: AbortSignal): { controller: AbortController; cleanup: () => void } {
-    const controller = new AbortController();
-    const hardTimer = setTimeout(() => controller.abort(), config.AI.TIMEOUTS.HARD_MS);
-
-    if (!outerSignal) return { controller, cleanup: () => clearTimeout(hardTimer) };
-    if (outerSignal.aborted) {
-      controller.abort(outerSignal.reason);
-      return { controller, cleanup: () => clearTimeout(hardTimer) };
-    }
-
-    const onAbort = () => controller.abort(outerSignal.reason);
-    outerSignal.addEventListener('abort', onAbort, { once: true });
-    return {
-      controller,
-      cleanup: () => {
-        clearTimeout(hardTimer);
-        outerSignal.removeEventListener('abort', onAbort);
-      },
-    };
-  }
-
-  private async *readNDJSON(
-    body: ReadableStream<Uint8Array>,
-    onBump: () => void,
-  ): AsyncGenerator<OllamaChatChunk> {
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    try {
-      while (true) {
-        const { value, done } = await reader.read();
-        const text = decoder.decode(value ?? new Uint8Array(), { stream: !done });
-        if (text) {
-          onBump();
-          buffer += text;
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-
-          for (const line of lines) {
-            const parsed = this.parseLine(line);
-            if (parsed) yield parsed;
-          }
-        }
-        if (done) break;
-      }
-
-      if (buffer.trim()) {
-        const parsed = this.parseLine(buffer);
-        if (parsed) yield parsed;
-      }
-    } finally {
-      reader.releaseLock();
-    }
-  }
-
-  private parseLine(line: string): OllamaChatChunk | null {
-    const trimmed = line.trim();
-    if (!trimmed) return null;
-
-    const maybeSSE = trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed;
-    if (!maybeSSE || maybeSSE === '[DONE]') return null;
-
-    try {
-      return JSON.parse(maybeSSE) as OllamaChatChunk;
-    } catch {
-      return null;
-    }
   }
 
   private parseChunk(chunk: OllamaChatChunk): string {

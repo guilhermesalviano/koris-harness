@@ -33,13 +33,18 @@ class SerialQueue {
   constructor(
     private readonly backgroundGraceMs = 0,
     private readonly trackParallelFromConfig = false,
-  ) {}
+  ) {
+    if (!Number.isFinite(backgroundGraceMs) || backgroundGraceMs < 0) {
+      throw new RangeError('backgroundGraceMs must be a finite non-negative number.');
+    }
+  }
 
   run<T>(fn: () => Promise<T>, priority = 0, label = ''): Promise<T> {
     return this.enqueue(fn, priority, label);
   }
 
   acquire(priority = 0, label = ''): Promise<() => void> {
+    if (!Number.isFinite(priority)) return Promise.reject(new RangeError('priority must be finite.'));
     if (this.isParallelMode) {
       const id = this.startInFlight(priority, label);
       return Promise.resolve(() => {
@@ -58,6 +63,7 @@ class SerialQueue {
   }
 
   private enqueue<T>(fn: () => Promise<T>, priority: number, label: string): Promise<T> {
+    if (!Number.isFinite(priority)) return Promise.reject(new RangeError('priority must be finite.'));
     if (this.isParallelMode) {
       return this.runParallel(fn, priority, label);
     }
@@ -141,12 +147,12 @@ class SerialQueue {
       const id = this.startInFlight(task.priority, task.label);
       try {
         task.resolve(await task.fn());
-        if (this.isInteractive(task.priority)) {
-          this.lastInteractiveEnd = Date.now();
-        }
       } catch (err) {
         task.reject(err);
       } finally {
+        if (this.isInteractive(task.priority)) {
+          this.lastInteractiveEnd = Date.now();
+        }
         this.endInFlight(id);
       }
     }
@@ -168,9 +174,6 @@ class SerialQueue {
 
   private waitUntilEligible(): Promise<void> {
     return new Promise<void>((resolve) => {
-      if (this.waitTimer !== null) {
-        clearTimeout(this.waitTimer);
-      }
       let earliest = Infinity;
       for (const task of this.tasks) {
         const at = this.isInteractive(task.priority)
@@ -181,12 +184,14 @@ class SerialQueue {
         }
       }
       const delay = Math.max(0, earliest - Date.now());
-      this.wakeWait = resolve;
-      this.waitTimer = setTimeout(() => {
+      const wake = (): void => {
+        if (this.waitTimer !== null) clearTimeout(this.waitTimer);
         this.waitTimer = null;
         this.wakeWait = null;
         resolve();
-      }, delay);
+      };
+      this.wakeWait = wake;
+      this.waitTimer = setTimeout(wake, delay);
     });
   }
 }

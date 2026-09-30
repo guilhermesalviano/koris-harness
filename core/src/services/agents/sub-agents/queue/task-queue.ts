@@ -15,7 +15,11 @@ export class TaskQueue {
   private queue: TaskQueueEntry[] = [];
   private active: TaskQueueEntry[] = [];
 
-  constructor(private concurrency: number) {}
+  constructor(private readonly concurrency: number) {
+    if (!Number.isInteger(concurrency) || concurrency < 1) {
+      throw new RangeError('concurrency must be a positive integer.');
+    }
+  }
 
   add<T>(task: () => Promise<T>, label = 'task'): Promise<T> {
     return new Promise<T>((resolve, reject) => {

@@ -209,6 +209,14 @@ describe('AdminRouterFactory /audit', () => {
     vi.clearAllMocks();
   });
 
+  it('uses integer defaults for invalid pagination before querying SQLite', () => {
+    auditRepo.findAll.mockReturnValue([]);
+    const router = AdminRouterFactory.create(logger, {} as never, {} as never, sessionManager as never);
+    const res = makeResponse();
+    callRoute(router, makeRequest('GET', '/audit', { limit: '2.5', offset: 'Infinity' }), res);
+    expect(auditRepo.findAll).toHaveBeenCalledWith(expect.objectContaining({ limit: 20, offset: 0 }));
+  });
+
   it('lists audit entries with pagination and forwards filters', () => {
     auditRepo.count.mockReturnValue(3);
     auditRepo.findAll.mockReturnValue([
@@ -1866,4 +1874,3 @@ describe('AdminRouterFactory heartbeats/channels/outbound reads', () => {
     expect(res.json).toHaveBeenCalledWith({ success: true });
   });
 });
-

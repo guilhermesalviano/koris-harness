@@ -100,7 +100,7 @@ describe('setBeat', () => {
   });
 
   it('returns error when only one of channel or target is provided', async () => {
-    const result = await setBeat(logger, { beat: 'do', cron_expression: '0 9 * * *', channel: 'telegram' }, gateway);
+    const result = await setBeat(logger, { beat: 'do', cron_expression: '0 9 * * *', channel: 'whatsapp' }, gateway);
     expect(result.success).toBe(false);
     expect(result.error).toContain('together');
   });
